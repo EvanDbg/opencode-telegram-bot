@@ -8,6 +8,7 @@ import { config } from "../config.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { interactionGuardMiddleware } from "./middleware/interaction-guard.js";
 import { unknownCommandMiddleware } from "./middleware/unknown-command.js";
+import { extractCommandName } from "./utils/commands.js";
 import { BOT_COMMANDS } from "./commands/definitions.js";
 import { startCommand } from "./commands/start.js";
 import { helpCommand } from "./commands/help.js";
@@ -22,6 +23,7 @@ import { opencodeStopCommand } from "./commands/opencode-stop.js";
 import { handleAgentCommand } from "./commands/agent.js";
 import { handleModelCommand } from "./commands/model.js";
 import { renameCommand, handleRenameCancel, handleRenameTextAnswer } from "./commands/rename.js";
+import { passthroughCommand } from "./commands/passthrough.js";
 import {
   handleQuestionCallback,
   showCurrentQuestion,
@@ -53,6 +55,7 @@ import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
 import { sendMessageWithMarkdownFallback } from "./utils/send-with-markdown-fallback.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
+import { passthroughManager } from "../passthrough/manager.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 
 let botInstance: Bot<Context> | null = null;
@@ -122,6 +125,119 @@ const toolMessageBatcher = new ToolMessageBatcher({
     }
   },
 });
+
+interface MainTextRoutingDeps {
+  bot: Bot<Context>;
+  ensureEventSubscriptionFn?: typeof ensureEventSubscription;
+  processPromptFn?: typeof processUserPrompt;
+  consumePassthroughFn?: () => string | null;
+  isInteractionActiveFn?: () => boolean;
+  isQuestionActiveFn?: () => boolean;
+  handleQuestionTextAnswerFn?: typeof handleQuestionTextAnswer;
+  handleRenameTextAnswerFn?: typeof handleRenameTextAnswer;
+}
+
+export async function handleMainTextRouting(
+  ctx: Context,
+  deps: MainTextRoutingDeps,
+): Promise<void> {
+  const text = ctx.message?.text;
+  if (!text) {
+    return;
+  }
+
+  if (!ctx.chat) {
+    logger.warn("[Bot] message:text handler skipped: chat context is missing");
+    return;
+  }
+
+  const {
+    bot,
+    ensureEventSubscriptionFn = ensureEventSubscription,
+    processPromptFn = processUserPrompt,
+    consumePassthroughFn = () => passthroughManager.consume(),
+    isInteractionActiveFn = () => interactionManager.getSnapshot() !== null,
+    isQuestionActiveFn = () => questionManager.isActive(),
+    handleQuestionTextAnswerFn = handleQuestionTextAnswer,
+    handleRenameTextAnswerFn = handleRenameTextAnswer,
+  } = deps;
+
+  const interactionActive = isInteractionActiveFn();
+  if (interactionActive) {
+    logger.debug("[Bot] Passthrough consume skipped while interaction is active");
+  }
+
+  const passthroughPayload = interactionActive ? null : consumePassthroughFn();
+  if (passthroughPayload !== null) {
+    logger.debug(`[Bot] Passthrough consumed; forwarding exact text (length=${text.length})`);
+
+    botInstance = bot;
+    chatIdInstance = ctx.chat.id;
+
+    const promptDeps = { bot, ensureEventSubscription: ensureEventSubscriptionFn };
+    await processPromptFn(ctx, text, promptDeps);
+
+    logger.debug("[Bot] message:text handler completed (prompt sent in background)");
+    return;
+  }
+
+  if (text.startsWith("/")) {
+    return;
+  }
+
+  if (isQuestionActiveFn()) {
+    await handleQuestionTextAnswerFn(ctx);
+    return;
+  }
+
+  const handledRename = await handleRenameTextAnswerFn(ctx);
+  if (handledRename) {
+    return;
+  }
+
+  botInstance = bot;
+  chatIdInstance = ctx.chat.id;
+
+  const promptDeps = { bot, ensureEventSubscription: ensureEventSubscriptionFn };
+  await processPromptFn(ctx, text, promptDeps);
+
+  logger.debug("[Bot] message:text handler completed (prompt sent in background)");
+}
+
+interface PassthroughSlashBypassDeps {
+  bot: Bot<Context>;
+  isPassthroughArmedFn?: () => boolean;
+  handleMainTextRoutingFn?: typeof handleMainTextRouting;
+}
+
+export async function handlePassthroughSlashBypass(
+  ctx: Context,
+  deps: PassthroughSlashBypassDeps,
+): Promise<boolean> {
+  const text = ctx.message?.text;
+  if (!text || !text.startsWith("/")) {
+    return false;
+  }
+
+  const {
+    bot,
+    isPassthroughArmedFn = () => passthroughManager.isArmed(),
+    handleMainTextRoutingFn = handleMainTextRouting,
+  } = deps;
+
+  if (!isPassthroughArmedFn()) {
+    return false;
+  }
+
+  const commandName = extractCommandName(text);
+  if (commandName === "passthrough") {
+    return false;
+  }
+
+  logger.debug(`[Bot] Bypassing bot command handling for armed passthrough slash: ${text}`);
+  await handleMainTextRoutingFn(ctx, { bot });
+  return true;
+}
 
 async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
   if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
@@ -512,6 +628,15 @@ export function createBot(): Bot<Context> {
   bot.use(ensureCommandsInitialized);
   bot.use(interactionGuardMiddleware);
 
+  bot.on("message:text", async (ctx, next) => {
+    const handled = await handlePassthroughSlashBypass(ctx, { bot });
+    if (handled) {
+      return;
+    }
+
+    await next();
+  });
+
   const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
     const activeInteraction = interactionManager.getSnapshot();
     if (!activeInteraction) {
@@ -537,6 +662,7 @@ export function createBot(): Bot<Context> {
   bot.command("model", handleModelCommand);
   bot.command("stop", stopCommand);
   bot.command("rename", renameCommand);
+  bot.command("passthrough", passthroughCommand);
 
   bot.on("message:text", unknownCommandMiddleware);
 
@@ -765,32 +891,7 @@ export function createBot(): Bot<Context> {
   });
 
   bot.on("message:text", async (ctx) => {
-    const text = ctx.message?.text;
-    if (!text) {
-      return;
-    }
-
-    if (text.startsWith("/")) {
-      return;
-    }
-
-    if (questionManager.isActive()) {
-      await handleQuestionTextAnswer(ctx);
-      return;
-    }
-
-    const handledRename = await handleRenameTextAnswer(ctx);
-    if (handledRename) {
-      return;
-    }
-
-    botInstance = bot;
-    chatIdInstance = ctx.chat.id;
-
-    const promptDeps = { bot, ensureEventSubscription };
-    await processUserPrompt(ctx, text, promptDeps);
-
-    logger.debug("[Bot] message:text handler completed (prompt sent in background)");
+    await handleMainTextRouting(ctx, { bot });
   });
 
   bot.catch((err) => {

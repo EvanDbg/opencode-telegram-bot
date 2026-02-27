@@ -199,11 +199,94 @@ export async function processUserPrompt(
     const currentAgent = getStoredAgent();
     const storedModel = getStoredModel();
 
+    const normalizedText = text.trim();
+    const slashCommandMatch = /^\/([a-z0-9_-]+)(?:@[^\s]+)?(?:\s+([\s\S]*))?$/i.exec(
+      normalizedText,
+    );
+    const slashCommandName = slashCommandMatch?.[1]?.toLowerCase();
+    const slashCommandArguments = slashCommandMatch?.[2]?.trim();
+
+    const compactCommandMatch = slashCommandName === "compact" || slashCommandName === "summarize";
+    if (compactCommandMatch && fileParts.length === 0) {
+      logger.info(
+        `[Bot] Detected slash compact command via prompt path: command=/${slashCommandName} session=${currentSession.id}`,
+      );
+
+      const { error } = await opencodeClient.session.summarize({
+        sessionID: currentSession.id,
+        directory: currentSession.directory,
+        providerID: storedModel.providerID,
+        modelID: storedModel.modelID,
+      });
+
+      if (error) {
+        logger.error("[Bot] Compact command failed via session.summarize:", error);
+        await ctx.reply(t("context.error"));
+        return false;
+      }
+
+      logger.info(`[Bot] Compact command completed via session.summarize: ${currentSession.id}`);
+      await ctx.reply(t("context.success"));
+      return true;
+    }
+
+    if (slashCommandName && fileParts.length === 0) {
+      logger.info(
+        `[Bot] Bridging slash command via session.command: command=/${slashCommandName}, session=${currentSession.id}`,
+      );
+
+      const commandErrorLogContext = {
+        sessionId: currentSession.id,
+        directory: currentSession.directory,
+        command: slashCommandName,
+        hasArguments: Boolean(slashCommandArguments),
+        agent: currentAgent || "default",
+        variant: storedModel.variant || "default",
+      };
+
+      safeBackgroundTask({
+        taskName: "session.command",
+        task: () =>
+          opencodeClient.session.command({
+            sessionID: currentSession.id,
+            directory: currentSession.directory,
+            command: slashCommandName,
+            arguments: slashCommandArguments || undefined,
+            agent: currentAgent || undefined,
+            variant: storedModel.variant,
+          }),
+        onSuccess: ({ error }) => {
+          if (error) {
+            const details = formatErrorDetails(error, 6000);
+            logger.error(
+              "[Bot] OpenCode API returned an error for session.command",
+              commandErrorLogContext,
+            );
+            logger.error("[Bot] session.command error details:", details);
+            logger.error("[Bot] session.command raw API error object:", error);
+            void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+            return;
+          }
+
+          logger.info(`[Bot] session.command completed for /${slashCommandName}`);
+        },
+        onError: (error) => {
+          const details = formatErrorDetails(error, 6000);
+          logger.error("[Bot] session.command background task failed", commandErrorLogContext);
+          logger.error("[Bot] session.command background failure details:", details);
+          logger.error("[Bot] session.command raw background error object:", error);
+          void bot.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error")).catch(() => {});
+        },
+      });
+
+      return true;
+    }
+
     // Build parts array with text and files
     const parts: Array<TextPartInput | FilePartInput> = [];
 
     // Add text part if present
-    if (text.trim().length > 0) {
+    if (normalizedText.length > 0) {
       parts.push({ type: "text", text });
     }
 

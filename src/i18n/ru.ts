@@ -171,8 +171,7 @@ export const ru: I18nDictionary = {
   "model.change_error_callback": "Ошибка при смене модели",
   "model.menu.empty": "⚠️ Нет доступных моделей",
   "model.menu.current": "Текущая модель: {name}\n\nВыберите модель:",
-  "model.menu.favorites_hint":
-    "ℹ️ Список моделей формируется из favorites в OpenCode CLI.",
+  "model.menu.favorites_hint": "ℹ️ Список моделей формируется из favorites в OpenCode CLI.",
   "model.menu.error": "🔴 Не удалось получить список моделей",
 
   "variant.model_not_selected_callback": "Ошибка: модель не выбрана",
@@ -293,7 +292,13 @@ export const ru: I18nDictionary = {
     "⚠️ Эта команда недоступна, пока ожидается новое название сессии.",
   "rename.button.cancel": "❌ Отмена",
 
+  "passthrough.armed":
+    "✅ Режим passthrough включен. Следующая slash-команда (или текстовое сообщение) будет отправлена напрямую в OpenCode.",
+  "passthrough.blocked.interaction_active":
+    "⚠️ Нельзя включить passthrough, пока активна другая интеракция. Сначала завершите или отмените ее.",
+
   "cmd.description.rename": "Переименовать текущую сессию",
+  "cmd.description.passthrough": "Переслать следующую slash-команду в OpenCode",
 
   "cli.usage":
     "Использование:\n  opencode-telegram [start] [--mode sources|installed]\n  opencode-telegram status\n  opencode-telegram stop\n  opencode-telegram config\n\nЗаметки:\n  - Без команды по умолчанию используется `start`\n  - `--mode` сейчас поддерживается только для `start`",

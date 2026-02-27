@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context, NextFunction } from "grammy";
 import { unknownCommandMiddleware } from "../../../src/bot/middleware/unknown-command.js";
 import { t } from "../../../src/i18n/index.js";
+import { passthroughManager } from "../../../src/passthrough/manager.js";
 
 function createTextContext(text: string): Context {
   return {
@@ -11,6 +12,10 @@ function createTextContext(text: string): Context {
 }
 
 describe("unknownCommandMiddleware", () => {
+  beforeEach(() => {
+    passthroughManager.clear();
+  });
+
   it("replies for unknown slash command in idle flow", async () => {
     const ctx = createTextContext("/foobar");
     const next: NextFunction = vi.fn().mockResolvedValue(undefined);
@@ -23,6 +28,30 @@ describe("unknownCommandMiddleware", () => {
         command: "/foobar",
       }),
     );
+  });
+
+  it("passes through unknown slash command when passthrough is armed", async () => {
+    passthroughManager.arm("payload");
+    const ctx = createTextContext("/foobar");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await unknownCommandMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+    expect(passthroughManager.isArmed()).toBe(true);
+  });
+
+  it("passes through unknown slash command with bot mention when passthrough is armed", async () => {
+    passthroughManager.arm("payload");
+    const ctx = createTextContext("/foobar@MyBot arg1");
+    const next: NextFunction = vi.fn().mockResolvedValue(undefined);
+
+    await unknownCommandMiddleware(ctx, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ctx.reply).not.toHaveBeenCalled();
+    expect(passthroughManager.isArmed()).toBe(true);
   });
 
   it("passes through known command", async () => {

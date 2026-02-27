@@ -100,12 +100,15 @@ opencode-telegram config
 | `/projects`       | Switch between OpenCode projects                        |
 | `/model`          | Choose a model from your favorites                      |
 | `/agent`          | Switch agent mode (Plan / Build)                        |
+| `/passthrough`    | Forward your next slash command to OpenCode as-is       |
 | `/rename`         | Rename the current session                              |
 | `/opencode_start` | Start the OpenCode server remotely                      |
 | `/opencode_stop`  | Stop the OpenCode server remotely                       |
 | `/help`           | Show available commands                                 |
 
 Any regular text message is sent as a prompt to the coding agent only when no blocking interaction is active. Voice/audio messages are transcribed and then sent as prompts when STT is configured.
+
+`/passthrough` is one-shot, it applies only to your next slash command (or text message). When armed, that next message is forwarded as-is, including text that starts with `/`. Passthrough is blocked while an interactive flow is active.
 
 > `/opencode_start` and `/opencode_stop` are intended as emergency commands — for example, if you need to restart a stuck server while away from your computer. Under normal usage, start `opencode serve` yourself before launching the bot.
 

@@ -292,7 +292,13 @@ export const en = {
     "⚠️ This command is not available while rename is waiting for a new name.",
   "rename.button.cancel": "❌ Cancel",
 
+  "passthrough.armed":
+    "✅ Passthrough mode armed. Your next slash command (or text message) will be sent directly to OpenCode.",
+  "passthrough.blocked.interaction_active":
+    "⚠️ Passthrough cannot be armed while another interaction is active. Finish or cancel it first.",
+
   "cmd.description.rename": "Rename current session",
+  "cmd.description.passthrough": "Forward next slash command to OpenCode",
 
   "cli.usage":
     "Usage:\n  opencode-telegram [start] [--mode sources|installed]\n  opencode-telegram status\n  opencode-telegram stop\n  opencode-telegram config\n\nNotes:\n  - No command defaults to `start`\n  - `--mode` is currently supported for `start` only",

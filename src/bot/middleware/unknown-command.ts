@@ -2,6 +2,7 @@ import type { Context, NextFunction } from "grammy";
 import { extractCommandName, isKnownCommand } from "../utils/commands.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { passthroughManager } from "../../passthrough/manager.js";
 
 export async function unknownCommandMiddleware(ctx: Context, next: NextFunction): Promise<void> {
   const text = ctx.message?.text;
@@ -17,6 +18,12 @@ export async function unknownCommandMiddleware(ctx: Context, next: NextFunction)
   }
 
   if (isKnownCommand(commandName)) {
+    await next();
+    return;
+  }
+
+  if (text.trim().startsWith("/") && passthroughManager.isArmed()) {
+    logger.debug("[Bot] Unknown slash command bypassed due to armed passthrough");
     await next();
     return;
   }
