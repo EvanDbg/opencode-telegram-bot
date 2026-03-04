@@ -127,7 +127,7 @@ describe("bot/handlers/permission", () => {
     const botApi = createBotApi(500);
     const request = createPermissionRequest("perm-1");
 
-    await showPermissionRequest(botApi, 777, request);
+    await showPermissionRequest(botApi, 777, request, "global", null);
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     const [, , options] = sendMessageMock.mock.calls[0];
@@ -156,12 +156,12 @@ describe("bot/handlers/permission", () => {
   it("keeps multiple active permission requests without deleting previous messages", async () => {
     const botApi = createBotApi(500);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), "global", null);
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 501 });
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"), "global", null);
 
     const deleteMessageMock = botApi.deleteMessage as unknown as ReturnType<typeof vi.fn>;
     expect(deleteMessageMock).not.toHaveBeenCalled();
@@ -182,11 +182,11 @@ describe("bot/handlers/permission", () => {
   it("rejects callback from unknown permission message", async () => {
     const botApi = createBotApi(500);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), "global", null);
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 501 });
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"), "global", null);
 
     const staleCtx = createPermissionCallbackContext("permission:once", 499);
     const handled = await handlePermissionCallback(staleCtx);
@@ -205,7 +205,7 @@ describe("bot/handlers/permission", () => {
 
   it("handles valid permission reply and clears active states", async () => {
     const botApi = createBotApi(600);
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-valid"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-valid"), "global", null);
 
     const ctx = createPermissionCallbackContext("permission:always", 600);
     const handled = await handlePermissionCallback(ctx);
@@ -229,11 +229,11 @@ describe("bot/handlers/permission", () => {
   it("keeps permission interaction active until all requests are replied", async () => {
     const botApi = createBotApi(700);
 
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-1"), "global", null);
 
     const sendMessageMock = botApi.sendMessage as unknown as ReturnType<typeof vi.fn>;
     sendMessageMock.mockResolvedValueOnce({ message_id: 701 });
-    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"));
+    await showPermissionRequest(botApi, 777, createPermissionRequest("perm-2"), "global", null);
 
     const firstCtx = createPermissionCallbackContext("permission:once", 700);
     const firstHandled = await handlePermissionCallback(firstCtx);
@@ -285,7 +285,7 @@ describe("bot/handlers/permission", () => {
     } as unknown as Context["api"];
 
     await expect(
-      showPermissionRequest(botApi, 777, createPermissionRequest("perm-fail")),
+      showPermissionRequest(botApi, 777, createPermissionRequest("perm-fail"), "global", null),
     ).rejects.toThrow("send failed");
 
     expect(permissionManager.isActive()).toBe(false);
