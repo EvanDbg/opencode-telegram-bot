@@ -6,7 +6,7 @@ import { interactionManager } from "../../interaction/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -162,7 +162,9 @@ export async function handleRenameTextAnswer(ctx: Context): Promise<boolean> {
       setCurrentSession(nextSession, scopeKey);
     }
 
-    if (pinnedMessageManager.isInitialized()) {
+    const allowPinned = getScopeFromContext(ctx)?.threadId === null;
+
+    if (allowPinned && pinnedMessageManager.isInitialized()) {
       await pinnedMessageManager.onSessionChange(sessionInfo.sessionId, newTitle);
     }
 

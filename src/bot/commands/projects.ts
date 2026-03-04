@@ -20,7 +20,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { config } from "../../config.js";
 import { ProjectInfo } from "../../settings/manager.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
@@ -204,6 +204,7 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
 
 export async function handleProjectSelect(ctx: Context): Promise<boolean> {
   const scopeKey = getScopeKeyFromContext(ctx);
+  const allowPinned = getScopeFromContext(ctx)?.threadId === null;
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data) {
     return false;
@@ -265,23 +266,31 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     clearInteractionWithScope("project_switched", scopeKey);
 
     // Clear pinned message when switching projects
-    try {
-      await pinnedMessageManager.clear();
-    } catch (err) {
-      logger.error("[Bot] Error clearing pinned message:", err);
+    if (allowPinned) {
+      try {
+        await pinnedMessageManager.clear();
+      } catch (err) {
+        logger.error("[Bot] Error clearing pinned message:", err);
+      }
     }
 
     // Initialize keyboard manager if not already
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
     // Refresh context limit for current model
-    await pinnedMessageManager.refreshContextLimit();
-    const contextLimit = pinnedMessageManager.getContextLimit();
+    if (allowPinned) {
+      await pinnedMessageManager.refreshContextLimit();
+    }
+    const contextLimit = allowPinned ? pinnedMessageManager.getContextLimit() : 0;
 
     // Reset context to 0 (no session selected) with current model's limit
-    keyboardManager.updateContext(0, contextLimit);
+    if (contextLimit > 0) {
+      keyboardManager.updateContext(0, contextLimit, scopeKey);
+    } else {
+      keyboardManager.clearContext(scopeKey);
+    }
 
     // Get current state for keyboard (with context = 0)
     const currentAgent = getStoredAgent();

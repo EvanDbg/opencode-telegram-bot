@@ -52,7 +52,7 @@ export interface TokensInfo {
   cacheWrite: number;
 }
 
-type TokensCallback = (tokens: TokensInfo) => void;
+type TokensCallback = (sessionId: string, tokens: TokensInfo) => void;
 
 type SessionCompactedCallback = (sessionId: string, directory: string) => void;
 
@@ -391,7 +391,7 @@ class SummaryAggregator {
             `[Aggregator] Tokens: input=${tokens.input}, output=${tokens.output}, reasoning=${tokens.reasoning}`,
           );
           // Call synchronously so keyboardManager is updated before onComplete sends the reply
-          this.onTokensCallback(tokens);
+          this.onTokensCallback(info.sessionID, tokens);
         }
 
         if (this.onCompleteCallback && lastPart.length > 0) {

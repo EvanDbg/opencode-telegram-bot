@@ -8,8 +8,28 @@ export interface ConversationScope {
   threadId: number | null;
 }
 
-export function createScopeKey(chatId: number, threadId: number | null): string {
-  return threadId === null ? GLOBAL_SCOPE_KEY : `${chatId}:${threadId}`;
+function isKnownChatType(type: unknown): type is "private" | "group" | "supergroup" | "channel" {
+  return type === "private" || type === "group" || type === "supergroup" || type === "channel";
+}
+
+export function createScopeKey(
+  chatId: number,
+  threadId: number | null,
+  chatType?: "private" | "group" | "supergroup" | "channel",
+): string {
+  if (threadId !== null) {
+    return `${chatId}:${threadId}`;
+  }
+
+  if (!chatType) {
+    return GLOBAL_SCOPE_KEY;
+  }
+
+  if (chatType === "private") {
+    return `dm:${chatId}`;
+  }
+
+  return `chat:${chatId}`;
 }
 
 function extractThreadIdFromMessage(message: {
@@ -35,7 +55,11 @@ export function getScopeFromContext(ctx: Context): ConversationScope | null {
       : null;
 
   return {
-    key: createScopeKey(ctx.chat.id, threadId),
+    key: createScopeKey(
+      ctx.chat.id,
+      threadId,
+      isKnownChatType(ctx.chat.type) ? ctx.chat.type : undefined,
+    ),
     chatId: ctx.chat.id,
     threadId,
   };

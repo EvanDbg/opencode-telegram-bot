@@ -185,10 +185,10 @@ function parseCommandsMetadata(state: InteractionState | null): CommandsMetadata
   return null;
 }
 
-function clearCommandsInteraction(reason: string): void {
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
+function clearCommandsInteraction(reason: string, scopeKey: string): void {
+  const metadata = parseCommandsMetadata(interactionManager.getSnapshot(scopeKey));
   if (metadata) {
-    interactionManager.clear(reason);
+    interactionManager.clear(reason, scopeKey);
   }
 }
 
@@ -366,6 +366,7 @@ async function executeCommand(
 
 export async function commandsCommand(ctx: CommandContext<Context>): Promise<void> {
   try {
+    const scopeKey = getScopeKeyFromContext(ctx);
     const currentProject = getCurrentProject();
     if (!currentProject) {
       await ctx.reply(t("bot.project_not_selected"));
@@ -383,17 +384,20 @@ export async function commandsCommand(ctx: CommandContext<Context>): Promise<voi
       reply_markup: keyboard,
     });
 
-    interactionManager.start({
-      kind: "custom",
-      expectedInput: "callback",
-      metadata: {
-        flow: "commands",
-        stage: "list",
-        messageId: message.message_id,
-        projectDirectory: currentProject.worktree,
-        commands,
+    interactionManager.start(
+      {
+        kind: "custom",
+        expectedInput: "callback",
+        metadata: {
+          flow: "commands",
+          stage: "list",
+          messageId: message.message_id,
+          projectDirectory: currentProject.worktree,
+          commands,
+        },
       },
-    });
+      scopeKey,
+    );
   } catch (error) {
     logger.error("[Commands] Error fetching commands list:", error);
     await ctx.reply(t("commands.fetch_error"));
@@ -409,7 +413,8 @@ export async function handleCommandsCallback(
     return false;
   }
 
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
+  const scopeKey = getScopeKeyFromContext(ctx);
+  const metadata = parseCommandsMetadata(interactionManager.getSnapshot(scopeKey));
   const callbackMessageId = getCallbackMessageId(ctx);
 
   if (!metadata || callbackMessageId === null || metadata.messageId !== callbackMessageId) {
@@ -419,7 +424,7 @@ export async function handleCommandsCallback(
 
   try {
     if (data === COMMANDS_CALLBACK_CANCEL) {
-      clearCommandsInteraction("commands_cancelled");
+      clearCommandsInteraction("commands_cancelled", scopeKey);
       await ctx.answerCallbackQuery({ text: t("commands.cancelled_callback") });
       await ctx.deleteMessage().catch(() => {});
       return true;
@@ -431,7 +436,7 @@ export async function handleCommandsCallback(
         return true;
       }
 
-      clearCommandsInteraction("commands_execute_clicked");
+      clearCommandsInteraction("commands_execute_clicked", scopeKey);
       await ctx.answerCallbackQuery({ text: t("commands.execute_callback") });
       await ctx.deleteMessage().catch(() => {});
 
@@ -460,21 +465,24 @@ export async function handleCommandsCallback(
       reply_markup: buildCommandsConfirmKeyboard(),
     });
 
-    interactionManager.transition({
-      expectedInput: "mixed",
-      metadata: {
-        flow: "commands",
-        stage: "confirm",
-        messageId: metadata.messageId,
-        projectDirectory: metadata.projectDirectory,
-        commandName: selectedCommand.name,
+    interactionManager.transition(
+      {
+        expectedInput: "mixed",
+        metadata: {
+          flow: "commands",
+          stage: "confirm",
+          messageId: metadata.messageId,
+          projectDirectory: metadata.projectDirectory,
+          commandName: selectedCommand.name,
+        },
       },
-    });
+      scopeKey,
+    );
 
     return true;
   } catch (error) {
     logger.error("[Commands] Error handling command callback:", error);
-    clearCommandsInteraction("commands_callback_error");
+    clearCommandsInteraction("commands_callback_error", scopeKey);
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }
@@ -489,7 +497,8 @@ export async function handleCommandTextArguments(
     return false;
   }
 
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
+  const scopeKey = getScopeKeyFromContext(ctx);
+  const metadata = parseCommandsMetadata(interactionManager.getSnapshot(scopeKey));
   if (!metadata || metadata.stage !== "confirm") {
     return false;
   }
@@ -500,7 +509,7 @@ export async function handleCommandTextArguments(
     return true;
   }
 
-  clearCommandsInteraction("commands_arguments_submitted");
+  clearCommandsInteraction("commands_arguments_submitted", scopeKey);
 
   if (ctx.chat) {
     await ctx.api.deleteMessage(ctx.chat.id, metadata.messageId).catch(() => {});

@@ -14,6 +14,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 function buildModelSelectionMenuText(modelLists: ModelSelectionLists): string {
   const lines = [t("model.menu.select"), t("model.menu.favorites_title")];
@@ -51,15 +52,16 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[ModelHandler] Received callback: ${callbackQuery.data}`);
 
   try {
+    const scopeKey = getScopeKeyFromContext(ctx);
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
     // Parse callback data: "model:providerID:modelID"
     const parts = callbackQuery.data.split(":");
     if (parts.length < 3) {
       logger.error(`[ModelHandler] Invalid callback data format: ${callbackQuery.data}`);
-      clearActiveInlineMenu("model_select_invalid_callback");
+      clearActiveInlineMenu("model_select_invalid_callback", scopeKey);
       await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
       return true;
     }
@@ -77,7 +79,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     selectModel(modelInfo);
 
     // Update keyboard manager state (may not be initialized if no session selected)
-    keyboardManager.updateModel(modelInfo);
+    keyboardManager.updateModel(modelInfo, scopeKey);
 
     // Refresh context limit for new model
     await pinnedMessageManager.refreshContextLimit();
@@ -88,10 +90,10 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
       pinnedMessageManager.getContextInfo() ??
       (pinnedMessageManager.getContextLimit() > 0
         ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
-        : null);
+        : keyboardManager.getContextInfo(scopeKey));
 
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
     }
 
     const variantName = formatVariantForButton(modelInfo.variant || "default");
@@ -103,7 +105,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     );
     const displayName = formatModelForDisplay(modelInfo.providerID, modelInfo.modelID);
 
-    clearActiveInlineMenu("model_selected");
+    clearActiveInlineMenu("model_selected", scopeKey);
 
     // Send confirmation message with updated keyboard
     await ctx.answerCallbackQuery({ text: t("model.changed_callback", { name: displayName }) });
@@ -116,7 +118,7 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("model_select_error");
+    clearActiveInlineMenu("model_select_error", getScopeKeyFromContext(ctx));
     logger.error("[ModelHandler] Error handling model select:", err);
     await ctx.answerCallbackQuery({ text: t("model.change_error_callback") }).catch(() => {});
     return false;

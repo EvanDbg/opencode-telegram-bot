@@ -65,7 +65,7 @@ import { getScopeFromContext, getThreadSendOptions } from "./scope.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 
 let botInstance: Bot<Context> | null = null;
-let commandsInitialized = false;
+const initializedCommandChats = new Set<number>();
 
 const scopeTargets = new Map<string, { chatId: number; threadId: number | null }>();
 
@@ -168,7 +168,7 @@ const toolMessageBatcher = new ToolMessageBatcher({
 });
 
 async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Promise<void> {
-  if (commandsInitialized || !ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
+  if (!ctx.from || ctx.from.id !== config.telegram.allowedUserId) {
     await next();
     return;
   }
@@ -179,16 +179,33 @@ async function ensureCommandsInitialized(ctx: Context, next: NextFunction): Prom
     return;
   }
 
-  try {
-    await ctx.api.setMyCommands(BOT_COMMANDS, {
-      scope: {
-        type: "chat",
-        chat_id: ctx.chat.id,
-      },
-    });
+  if (initializedCommandChats.has(ctx.chat.id)) {
+    await next();
+    return;
+  }
 
-    commandsInitialized = true;
-    logger.info(`[Bot] Commands initialized for authorized user (chat_id=${ctx.chat.id})`);
+  try {
+    if (ctx.chat.type === "private") {
+      await ctx.api.setMyCommands(BOT_COMMANDS, {
+        scope: {
+          type: "chat",
+          chat_id: ctx.chat.id,
+        },
+      });
+    } else {
+      await ctx.api.setMyCommands(BOT_COMMANDS, {
+        scope: {
+          type: "chat_member",
+          chat_id: ctx.chat.id,
+          user_id: ctx.from.id,
+        },
+      });
+    }
+
+    initializedCommandChats.add(ctx.chat.id);
+    logger.info(
+      `[Bot] Commands initialized for authorized user in chat (chat_id=${ctx.chat.id}, user_id=${ctx.from.id})`,
+    );
   } catch (err) {
     logger.error("[Bot] Failed to set commands:", err);
   }
@@ -231,7 +248,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       for (let i = 0; i < parts.length; i++) {
         const isLastPart = i === parts.length - 1;
         const keyboard =
-          isLastPart && keyboardManager.isInitialized() ? keyboardManager.getKeyboard() : undefined;
+          isLastPart && keyboardManager.isInitialized(target.scopeKey)
+            ? keyboardManager.getKeyboard(target.scopeKey)
+            : undefined;
         const options = keyboard ? { reply_markup: keyboard } : undefined;
 
         await sendMessageWithMarkdownFallback({
@@ -385,8 +404,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     toolMessageBatcher.enqueue(sessionId, t("bot.thinking"));
   });
 
-  summaryAggregator.setOnTokens(async (tokens) => {
-    if (!pinnedMessageManager.isInitialized()) {
+  summaryAggregator.setOnTokens(async (sessionId, tokens) => {
+    const target = getTargetBySessionId(sessionId);
+    if (!target) {
       return;
     }
 
@@ -398,10 +418,12 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       const contextSize = tokens.input + tokens.cacheRead;
       const contextLimit = pinnedMessageManager.getContextLimit();
       if (contextLimit > 0) {
-        keyboardManager.updateContext(contextSize, contextLimit);
+        keyboardManager.updateContext(contextSize, contextLimit, target.scopeKey);
       }
 
-      await pinnedMessageManager.onMessageComplete(tokens);
+      if (target.threadId === null && pinnedMessageManager.isInitialized()) {
+        await pinnedMessageManager.onMessageComplete(tokens);
+      }
     } catch (err) {
       logger.error("[Bot] Error updating pinned message with tokens:", err);
     }
@@ -409,6 +431,11 @@ async function ensureEventSubscription(directory: string): Promise<void> {
 
   summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
     if (!pinnedMessageManager.isInitialized()) {
+      return;
+    }
+
+    const target = getTargetBySessionId(sessionId);
+    if (!target || target.threadId !== null) {
       return;
     }
 
@@ -484,7 +511,7 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {
     try {
       logger.debug(`[Bot] Updating keyboard with context: ${tokensUsed}/${tokensLimit}`);
-      keyboardManager.updateContext(tokensUsed, tokensLimit);
+      keyboardManager.updateContext(tokensUsed, tokensLimit, "global");
       // Don't send automatic keyboard updates - keyboard will update naturally with user messages
     } catch (err) {
       logger.error("[Bot] Error updating keyboard context:", err);

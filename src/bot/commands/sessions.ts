@@ -16,7 +16,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
 
 const SESSION_CALLBACK_PREFIX = "session:";
 const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
@@ -181,6 +181,7 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 
 export async function handleSessionSelect(ctx: Context): Promise<boolean> {
   const scopeKey = getScopeKeyFromContext(ctx);
+  const allowPinned = getScopeFromContext(ctx)?.threadId === null;
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
@@ -270,32 +271,42 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
     }
 
     // Initialize pinned message manager if not already
-    if (!pinnedMessageManager.isInitialized() && ctx.chat) {
+    if (allowPinned && !pinnedMessageManager.isInitialized() && ctx.chat) {
       pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
     }
 
     // Initialize keyboard manager if not already
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
-    try {
-      // Create new pinned message for this session
-      await pinnedMessageManager.onSessionChange(session.id, session.title);
-      // Load context from session history (for existing sessions)
-      // Wait for it to complete so keyboard has correct context
-      await pinnedMessageManager.loadContextFromHistory(session.id, currentProject.worktree);
-    } catch (err) {
-      logger.error("[Bot] Error initializing pinned message:", err);
+    if (pinnedMessageManager.getContextLimit() === 0) {
+      await pinnedMessageManager.refreshContextLimit();
+    }
+
+    if (allowPinned) {
+      try {
+        // Create new pinned message for this session
+        await pinnedMessageManager.onSessionChange(session.id, session.title);
+        // Load context from session history (for existing sessions)
+        // Wait for it to complete so keyboard has correct context
+        await pinnedMessageManager.loadContextFromHistory(session.id, currentProject.worktree);
+      } catch (err) {
+        logger.error("[Bot] Error initializing pinned message:", err);
+      }
     }
 
     if (ctx.chat) {
       const chatId = ctx.chat.id;
 
       // Update keyboard with loaded context (callback executes async via setImmediate, so update manually)
-      const contextInfo = pinnedMessageManager.getContextInfo();
+      const contextInfo =
+        (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+        keyboardManager.getContextInfo(scopeKey);
       if (contextInfo) {
-        keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+        keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
+      } else if (pinnedMessageManager.getContextLimit() > 0) {
+        keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(), scopeKey);
       }
 
       // Delete loading message
@@ -308,7 +319,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       }
 
       // Send session selection confirmation with updated keyboard
-      const keyboard = keyboardManager.getKeyboard();
+      const keyboard = keyboardManager.getKeyboard(scopeKey);
       try {
         await ctx.api.sendMessage(chatId, t("sessions.selected", { title: session.title }), {
           reply_markup: keyboard,

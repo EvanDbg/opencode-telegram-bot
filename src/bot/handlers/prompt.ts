@@ -91,14 +91,15 @@ export async function processUserPrompt(
   chatIdInstance = ctx.chat!.id;
   const scope = getScopeFromContext(ctx);
   const scopeKey = scope?.key ?? "global";
+  const allowPinned = scope?.threadId === null;
 
   // Initialize pinned message manager if not already
-  if (!pinnedMessageManager.isInitialized()) {
+  if (allowPinned && !pinnedMessageManager.isInitialized()) {
     pinnedMessageManager.initialize(bot.api, ctx.chat!.id);
   }
 
   // Initialize keyboard manager if not already
-  keyboardManager.initialize(bot.api, ctx.chat!.id);
+  keyboardManager.initialize(bot.api, ctx.chat!.id, scopeKey);
 
   let currentSession = getCurrentSession(scopeKey);
 
@@ -137,15 +138,26 @@ export async function processUserPrompt(
     await ingestSessionInfoForCache(session);
 
     // Create pinned message for new session
-    try {
-      await pinnedMessageManager.onSessionChange(session.id, session.title);
-    } catch (err) {
-      logger.error("[Bot] Error creating pinned message for new session:", err);
+    if (allowPinned) {
+      try {
+        await pinnedMessageManager.onSessionChange(session.id, session.title);
+      } catch (err) {
+        logger.error("[Bot] Error creating pinned message for new session:", err);
+      }
+    }
+
+    if (pinnedMessageManager.getContextLimit() === 0) {
+      await pinnedMessageManager.refreshContextLimit();
     }
 
     const currentAgent = getStoredAgent();
     const currentModel = getStoredModel();
-    const contextInfo = pinnedMessageManager.getContextInfo();
+    const contextInfo =
+      (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+      keyboardManager.getContextInfo(scopeKey) ??
+      (pinnedMessageManager.getContextLimit() > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+        : null);
     const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(
       currentAgent,
@@ -163,7 +175,7 @@ export async function processUserPrompt(
     );
 
     // Ensure pinned message exists for existing session
-    if (!pinnedMessageManager.getState().messageId) {
+    if (allowPinned && !pinnedMessageManager.getState().messageId) {
       try {
         await pinnedMessageManager.onSessionChange(currentSession.id, currentSession.title);
       } catch (err) {

@@ -1,7 +1,10 @@
 import {
   getCurrentSession as getSettingsSession,
+  getScopedSessions,
   setCurrentSession as setSettingsSession,
+  setScopedSession,
   clearSession as clearSettingsSession,
+  clearScopedSession,
   SessionInfo,
 } from "../settings/manager.js";
 
@@ -11,10 +14,19 @@ const GLOBAL_SCOPE_KEY = "global";
 
 const sessionsByScope = new Map<string, SessionInfo>();
 const scopeBySessionId = new Map<string, string>();
+let hydrated = false;
 
-function ensureGlobalSessionLoaded(): void {
-  if (sessionsByScope.has(GLOBAL_SCOPE_KEY)) {
+function ensureSessionsLoaded(): void {
+  if (hydrated) {
     return;
+  }
+
+  hydrated = true;
+
+  const scopedSessions = getScopedSessions();
+  for (const [scopeKey, sessionInfo] of Object.entries(scopedSessions)) {
+    sessionsByScope.set(scopeKey, sessionInfo);
+    scopeBySessionId.set(sessionInfo.id, scopeKey);
   }
 
   const settingsSession = getSettingsSession();
@@ -30,6 +42,8 @@ export function setCurrentSession(
   sessionInfo: SessionInfo,
   scopeKey: string = GLOBAL_SCOPE_KEY,
 ): void {
+  ensureSessionsLoaded();
+
   const previous = sessionsByScope.get(scopeKey);
   if (previous && previous.id !== sessionInfo.id) {
     scopeBySessionId.delete(previous.id);
@@ -40,16 +54,19 @@ export function setCurrentSession(
 
   if (scopeKey === GLOBAL_SCOPE_KEY) {
     setSettingsSession(sessionInfo);
+    return;
   }
+
+  setScopedSession(scopeKey, sessionInfo);
 }
 
 export function getCurrentSession(scopeKey: string = GLOBAL_SCOPE_KEY): SessionInfo | null {
-  ensureGlobalSessionLoaded();
+  ensureSessionsLoaded();
   return sessionsByScope.get(scopeKey) ?? null;
 }
 
 export function clearSession(scopeKey: string = GLOBAL_SCOPE_KEY): void {
-  ensureGlobalSessionLoaded();
+  ensureSessionsLoaded();
 
   const session = sessionsByScope.get(scopeKey);
   if (session) {
@@ -60,18 +77,31 @@ export function clearSession(scopeKey: string = GLOBAL_SCOPE_KEY): void {
 
   if (scopeKey === GLOBAL_SCOPE_KEY) {
     clearSettingsSession();
+    return;
   }
+
+  clearScopedSession(scopeKey);
 }
 
 export function getScopeForSession(sessionId: string): string | null {
+  ensureSessionsLoaded();
   return scopeBySessionId.get(sessionId) ?? null;
 }
 
 export function registerSessionScope(sessionId: string, scopeKey: string): void {
+  ensureSessionsLoaded();
   scopeBySessionId.set(sessionId, scopeKey);
+
+  const sessionInfo = sessionsByScope.get(scopeKey);
+  if (!sessionInfo || sessionInfo.id !== sessionId || scopeKey === GLOBAL_SCOPE_KEY) {
+    return;
+  }
+
+  setScopedSession(scopeKey, sessionInfo);
 }
 
 export function getSessionById(sessionId: string): SessionInfo | null {
+  ensureSessionsLoaded();
   const scopeKey = scopeBySessionId.get(sessionId);
   if (!scopeKey) {
     return null;

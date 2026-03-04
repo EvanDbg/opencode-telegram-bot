@@ -12,11 +12,12 @@ import { pinnedMessageManager } from "../../pinned/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { sendMessageWithMarkdownFallback } from "../utils/send-with-markdown-fallback.js";
-import { getScopeKeyFromContext } from "../scope.js";
+import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
     const scopeKey = getScopeKeyFromContext(ctx);
+    const allowPinned = getScopeFromContext(ctx)?.threadId === null;
     const { data, error } = await opencodeClient.global.health();
 
     if (error || !data) {
@@ -71,21 +72,23 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     }
 
     if (ctx.chat) {
-      if (!pinnedMessageManager.isInitialized()) {
+      if (allowPinned && !pinnedMessageManager.isInitialized()) {
         pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
       }
-      // Fetch context limit if not yet loaded (e.g. fresh bot start)
       if (pinnedMessageManager.getContextLimit() === 0) {
         await pinnedMessageManager.refreshContextLimit();
       }
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
-    // Sync current context (tokens used + limit) into keyboard state
-    const contextInfo = pinnedMessageManager.getContextInfo();
+    const contextInfo =
+      (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+      keyboardManager.getContextInfo(scopeKey);
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
+    } else if (pinnedMessageManager.getContextLimit() > 0) {
+      keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(), scopeKey);
     }
-    const keyboard = keyboardManager.getKeyboard();
+    const keyboard = keyboardManager.getKeyboard(scopeKey);
     if (ctx.chat) {
       await sendMessageWithMarkdownFallback({
         api: ctx.api,

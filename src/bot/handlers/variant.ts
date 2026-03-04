@@ -18,6 +18,7 @@ import {
   replyWithInlineMenu,
 } from "./inline-menu.js";
 import { t } from "../../i18n/index.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 /**
  * Handle variant selection callback
@@ -39,8 +40,9 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
   logger.debug(`[VariantHandler] Received callback: ${callbackQuery.data}`);
 
   try {
+    const scopeKey = getScopeKeyFromContext(ctx);
     if (ctx.chat) {
-      keyboardManager.initialize(ctx.api, ctx.chat.id);
+      keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
     if (pinnedMessageManager.getContextLimit() === 0) {
@@ -66,8 +68,8 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     const updatedModel = getStoredModel();
 
     // Update keyboard manager state
-    keyboardManager.updateModel(updatedModel);
-    keyboardManager.updateVariant(variantId);
+    keyboardManager.updateModel(updatedModel, scopeKey);
+    keyboardManager.updateVariant(variantId, scopeKey);
 
     // Build keyboard with correct context info
     const currentAgent = getStoredAgent();
@@ -75,10 +77,10 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
       pinnedMessageManager.getContextInfo() ??
       (pinnedMessageManager.getContextLimit() > 0
         ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
-        : null);
+        : keyboardManager.getContextInfo(scopeKey));
 
     if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit);
+      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
     }
 
     const variantName = formatVariantForButton(variantId);
@@ -92,7 +94,7 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     // Send confirmation message with updated keyboard
     const displayName = formatVariantForDisplay(variantId);
 
-    clearActiveInlineMenu("variant_selected");
+    clearActiveInlineMenu("variant_selected", scopeKey);
 
     await ctx.answerCallbackQuery({ text: t("variant.changed_callback", { name: displayName }) });
     await ctx.reply(t("variant.changed_message", { name: displayName }), {
@@ -104,7 +106,7 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
 
     return true;
   } catch (err) {
-    clearActiveInlineMenu("variant_select_error");
+    clearActiveInlineMenu("variant_select_error", getScopeKeyFromContext(ctx));
     logger.error("[VariantHandler] Error handling variant select:", err);
     await ctx.answerCallbackQuery({ text: t("variant.change_error_callback") }).catch(() => {});
     return false;

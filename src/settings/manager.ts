@@ -32,6 +32,7 @@ export interface SessionDirectoryCacheInfo {
 export interface Settings {
   currentProject?: ProjectInfo;
   currentSession?: SessionInfo;
+  scopedSessions?: Record<string, SessionInfo>;
   currentAgent?: string;
   currentModel?: ModelInfo;
   pinnedMessageId?: number;
@@ -104,6 +105,31 @@ export function setCurrentSession(sessionInfo: SessionInfo): void {
 
 export function clearSession(): void {
   currentSettings.currentSession = undefined;
+  void writeSettingsFile(currentSettings);
+}
+
+export function getScopedSessions(): Record<string, SessionInfo> {
+  return { ...(currentSettings.scopedSessions ?? {}) };
+}
+
+export function setScopedSession(scopeKey: string, sessionInfo: SessionInfo): void {
+  const scopedSessions = currentSettings.scopedSessions ?? {};
+  currentSettings.scopedSessions = {
+    ...scopedSessions,
+    [scopeKey]: sessionInfo,
+  };
+  void writeSettingsFile(currentSettings);
+}
+
+export function clearScopedSession(scopeKey: string): void {
+  if (!currentSettings.scopedSessions || !(scopeKey in currentSettings.scopedSessions)) {
+    return;
+  }
+
+  const rest = Object.fromEntries(
+    Object.entries(currentSettings.scopedSessions).filter(([key]) => key !== scopeKey),
+  ) as Record<string, SessionInfo>;
+  currentSettings.scopedSessions = Object.keys(rest).length > 0 ? rest : undefined;
   void writeSettingsFile(currentSettings);
 }
 
