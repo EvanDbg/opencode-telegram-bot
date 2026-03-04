@@ -1,5 +1,6 @@
 import type { Context } from "grammy";
 import { interactionManager } from "./manager.js";
+import { getScopeKeyFromContext } from "../bot/scope.js";
 import type {
   BlockReason,
   ExpectedInput,
@@ -99,15 +100,16 @@ function isAllowedRenameCancelCallback(ctx: Context, state: InteractionState): b
 }
 
 export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
-  const state = interactionManager.getSnapshot();
+  const scopeKey = getScopeKeyFromContext(ctx);
+  const state = interactionManager.getSnapshot(scopeKey);
   const { inputType, command } = classifyIncomingInput(ctx);
 
   if (!state) {
     return createAllowDecision(inputType, null, command);
   }
 
-  if (interactionManager.isExpired()) {
-    interactionManager.clear("expired");
+  if (interactionManager.isExpired(scopeKey)) {
+    interactionManager.clear("expired", scopeKey);
     return createBlockDecision(inputType, state, "expired", command);
   }
 
