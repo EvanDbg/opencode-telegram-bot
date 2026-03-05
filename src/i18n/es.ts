@@ -380,4 +380,14 @@ export const es: I18nDictionary = {
     "🎤 El reconocimiento de voz no está configurado.\n\nConfigura STT_API_URL y STT_API_KEY en .env para habilitarlo.",
   "stt.error": "🔴 No se pudo reconocer el audio: {error}",
   "stt.empty_result": "🎤 No se detectó voz en el mensaje de audio.",
+
+  "start.welcome_dm":
+    "👋 El modo de DM está limitado a comandos de estado/control del bot y servidor.\n\nUsa un hilo de tema en grupo para trabajar con proyectos y sesiones.",
+  "status.global_overview": "📈 Resumen global",
+  "status.global_projects": "Proyectos: {count}",
+  "status.global_sessions": "Sesiones: {count}",
+  "dm.restricted.command":
+    "⚠️ Los comandos de control de sesión están deshabilitados en DM. Usa un hilo de tema en grupo para trabajar con proyectos/sesiones.",
+  "dm.restricted.prompt":
+    "⚠️ Los prompts están deshabilitados en DM. Usa un hilo de tema en grupo para ejecutar tareas de OpenCode.",
 };

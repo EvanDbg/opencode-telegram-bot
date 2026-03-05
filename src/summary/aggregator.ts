@@ -6,7 +6,7 @@ import type { Question } from "../question/types.js";
 import type { PermissionRequest } from "../permission/types.js";
 import type { FileChange } from "../pinned/types.js";
 import { logger } from "../utils/logger.js";
-import { getCurrentProject } from "../settings/manager.js";
+import { getSessionById } from "../session/manager.js";
 
 export interface SummaryInfo {
   sessionId: string;
@@ -71,7 +71,7 @@ type PermissionCallback = (request: PermissionRequest) => void;
 
 type SessionDiffCallback = (sessionId: string, diffs: FileChange[]) => void;
 
-type FileChangeCallback = (change: FileChange) => void;
+type FileChangeCallback = (change: FileChange, sessionId: string) => void;
 
 type ClearedCallback = () => void;
 
@@ -555,7 +555,7 @@ class SummaryAggregator {
           }
 
           if (preparedFileContext.fileChange && this.onFileChangeCallback) {
-            this.onFileChangeCallback(preparedFileContext.fileChange);
+            this.onFileChangeCallback(preparedFileContext.fileChange, toolData.sessionId);
           }
         }
       }
@@ -755,9 +755,9 @@ class SummaryAggregator {
     // Reload context from history after compaction
     if (this.onSessionCompactedCallback) {
       setImmediate(() => {
-        const project = getCurrentProject();
-        if (project) {
-          this.onSessionCompactedCallback!(sessionID, project.worktree);
+        const session = getSessionById(sessionID);
+        if (session?.directory) {
+          this.onSessionCompactedCallback!(sessionID, session.directory);
         }
       });
     }

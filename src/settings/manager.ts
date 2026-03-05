@@ -17,7 +17,7 @@ export interface SessionInfo {
 
 export interface ServerProcessInfo {
   pid: number;
-  startTime: string; // ISO string
+  startTime: string;
 }
 
 export interface SessionDirectoryCacheInfo {
@@ -30,15 +30,16 @@ export interface SessionDirectoryCacheInfo {
 }
 
 export interface Settings {
-  currentProject?: ProjectInfo;
-  currentSession?: SessionInfo;
+  scopedProjects?: Record<string, ProjectInfo>;
   scopedSessions?: Record<string, SessionInfo>;
-  currentAgent?: string;
-  currentModel?: ModelInfo;
-  pinnedMessageId?: number;
+  scopedAgents?: Record<string, string>;
+  scopedModels?: Record<string, ModelInfo>;
+  scopedPinnedMessageIds?: Record<string, number>;
   serverProcess?: ServerProcessInfo;
   sessionDirectoryCache?: SessionDirectoryCacheInfo;
 }
+
+const GLOBAL_SCOPE_KEY = "global";
 
 function getSettingsFilePath(): string {
   return getRuntimePaths().settingsFilePath;
@@ -80,31 +81,75 @@ function writeSettingsFile(settings: Settings): Promise<void> {
 
 let currentSettings: Settings = {};
 
-export function getCurrentProject(): ProjectInfo | undefined {
-  return currentSettings.currentProject;
+function getScopedMap<T>(map: Record<string, T> | undefined, scopeKey: string): T | undefined {
+  return map?.[scopeKey];
 }
 
-export function setCurrentProject(projectInfo: ProjectInfo): void {
-  currentSettings.currentProject = projectInfo;
+function setScopedMapValue<T>(
+  map: Record<string, T> | undefined,
+  scopeKey: string,
+  value: T,
+): Record<string, T> {
+  return {
+    ...(map ?? {}),
+    [scopeKey]: value,
+  };
+}
+
+function clearScopedMapValue<T>(
+  map: Record<string, T> | undefined,
+  scopeKey: string,
+): Record<string, T> | undefined {
+  if (!map || !(scopeKey in map)) {
+    return map;
+  }
+
+  const rest = Object.fromEntries(
+    Object.entries(map).filter(([key]) => key !== scopeKey),
+  ) as Record<string, T>;
+
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+export function getCurrentProject(scopeKey: string = GLOBAL_SCOPE_KEY): ProjectInfo | undefined {
+  return getScopedMap(currentSettings.scopedProjects, scopeKey);
+}
+
+export function setCurrentProject(
+  projectInfo: ProjectInfo,
+  scopeKey: string = GLOBAL_SCOPE_KEY,
+): void {
+  currentSettings.scopedProjects = setScopedMapValue(
+    currentSettings.scopedProjects,
+    scopeKey,
+    projectInfo,
+  );
   void writeSettingsFile(currentSettings);
 }
 
-export function clearProject(): void {
-  currentSettings.currentProject = undefined;
+export function clearProject(scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedProjects = clearScopedMapValue(currentSettings.scopedProjects, scopeKey);
   void writeSettingsFile(currentSettings);
 }
 
-export function getCurrentSession(): SessionInfo | undefined {
-  return currentSettings.currentSession;
+export function getCurrentSession(scopeKey: string = GLOBAL_SCOPE_KEY): SessionInfo | undefined {
+  return getScopedMap(currentSettings.scopedSessions, scopeKey);
 }
 
-export function setCurrentSession(sessionInfo: SessionInfo): void {
-  currentSettings.currentSession = sessionInfo;
+export function setCurrentSession(
+  sessionInfo: SessionInfo,
+  scopeKey: string = GLOBAL_SCOPE_KEY,
+): void {
+  currentSettings.scopedSessions = setScopedMapValue(
+    currentSettings.scopedSessions,
+    scopeKey,
+    sessionInfo,
+  );
   void writeSettingsFile(currentSettings);
 }
 
-export function clearSession(): void {
-  currentSettings.currentSession = undefined;
+export function clearSession(scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedSessions = clearScopedMapValue(currentSettings.scopedSessions, scopeKey);
   void writeSettingsFile(currentSettings);
 }
 
@@ -113,65 +158,67 @@ export function getScopedSessions(): Record<string, SessionInfo> {
 }
 
 export function setScopedSession(scopeKey: string, sessionInfo: SessionInfo): void {
-  const scopedSessions = currentSettings.scopedSessions ?? {};
-  currentSettings.scopedSessions = {
-    ...scopedSessions,
-    [scopeKey]: sessionInfo,
-  };
-  void writeSettingsFile(currentSettings);
+  setCurrentSession(sessionInfo, scopeKey);
 }
 
 export function clearScopedSession(scopeKey: string): void {
-  if (!currentSettings.scopedSessions || !(scopeKey in currentSettings.scopedSessions)) {
-    return;
-  }
+  clearSession(scopeKey);
+}
 
-  const rest = Object.fromEntries(
-    Object.entries(currentSettings.scopedSessions).filter(([key]) => key !== scopeKey),
-  ) as Record<string, SessionInfo>;
-  currentSettings.scopedSessions = Object.keys(rest).length > 0 ? rest : undefined;
+export function getCurrentAgent(scopeKey: string = GLOBAL_SCOPE_KEY): string | undefined {
+  return getScopedMap(currentSettings.scopedAgents, scopeKey);
+}
+
+export function setCurrentAgent(agentName: string, scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedAgents = setScopedMapValue(
+    currentSettings.scopedAgents,
+    scopeKey,
+    agentName,
+  );
   void writeSettingsFile(currentSettings);
 }
 
-export function getCurrentAgent(): string | undefined {
-  return currentSettings.currentAgent;
-}
-
-export function setCurrentAgent(agentName: string): void {
-  currentSettings.currentAgent = agentName;
+export function clearCurrentAgent(scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedAgents = clearScopedMapValue(currentSettings.scopedAgents, scopeKey);
   void writeSettingsFile(currentSettings);
 }
 
-export function clearCurrentAgent(): void {
-  currentSettings.currentAgent = undefined;
+export function getCurrentModel(scopeKey: string = GLOBAL_SCOPE_KEY): ModelInfo | undefined {
+  return getScopedMap(currentSettings.scopedModels, scopeKey);
+}
+
+export function setCurrentModel(modelInfo: ModelInfo, scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedModels = setScopedMapValue(
+    currentSettings.scopedModels,
+    scopeKey,
+    modelInfo,
+  );
   void writeSettingsFile(currentSettings);
 }
 
-export function getCurrentModel(): ModelInfo | undefined {
-  return currentSettings.currentModel;
-}
-
-export function setCurrentModel(modelInfo: ModelInfo): void {
-  currentSettings.currentModel = modelInfo;
+export function clearCurrentModel(scopeKey: string = GLOBAL_SCOPE_KEY): void {
+  currentSettings.scopedModels = clearScopedMapValue(currentSettings.scopedModels, scopeKey);
   void writeSettingsFile(currentSettings);
 }
 
-export function clearCurrentModel(): void {
-  currentSettings.currentModel = undefined;
+export function getScopedPinnedMessageId(scopeKey: string): number | undefined {
+  return getScopedMap(currentSettings.scopedPinnedMessageIds, scopeKey);
+}
+
+export function setScopedPinnedMessageId(scopeKey: string, messageId: number): void {
+  currentSettings.scopedPinnedMessageIds = setScopedMapValue(
+    currentSettings.scopedPinnedMessageIds,
+    scopeKey,
+    messageId,
+  );
   void writeSettingsFile(currentSettings);
 }
 
-export function getPinnedMessageId(): number | undefined {
-  return currentSettings.pinnedMessageId;
-}
-
-export function setPinnedMessageId(messageId: number): void {
-  currentSettings.pinnedMessageId = messageId;
-  void writeSettingsFile(currentSettings);
-}
-
-export function clearPinnedMessageId(): void {
-  currentSettings.pinnedMessageId = undefined;
+export function clearScopedPinnedMessageId(scopeKey: string): void {
+  currentSettings.scopedPinnedMessageIds = clearScopedMapValue(
+    currentSettings.scopedPinnedMessageIds,
+    scopeKey,
+  );
   void writeSettingsFile(currentSettings);
 }
 
@@ -211,12 +258,44 @@ export function __resetSettingsForTests(): void {
 export async function loadSettings(): Promise<void> {
   const loadedSettings = (await readSettingsFile()) as Settings & {
     toolMessagesIntervalSec?: unknown;
+    currentProject?: unknown;
+    currentSession?: unknown;
+    currentAgent?: unknown;
+    currentModel?: unknown;
+    pinnedMessageId?: unknown;
   };
+
+  let dirty = false;
 
   if ("toolMessagesIntervalSec" in loadedSettings) {
     delete loadedSettings.toolMessagesIntervalSec;
-    void writeSettingsFile(loadedSettings);
+    dirty = true;
+  }
+
+  if ("currentProject" in loadedSettings) {
+    delete loadedSettings.currentProject;
+    dirty = true;
+  }
+  if ("currentSession" in loadedSettings) {
+    delete loadedSettings.currentSession;
+    dirty = true;
+  }
+  if ("currentAgent" in loadedSettings) {
+    delete loadedSettings.currentAgent;
+    dirty = true;
+  }
+  if ("currentModel" in loadedSettings) {
+    delete loadedSettings.currentModel;
+    dirty = true;
+  }
+  if ("pinnedMessageId" in loadedSettings) {
+    delete loadedSettings.pinnedMessageId;
+    dirty = true;
   }
 
   currentSettings = loadedSettings;
+
+  if (dirty) {
+    void writeSettingsFile(currentSettings);
+  }
 }

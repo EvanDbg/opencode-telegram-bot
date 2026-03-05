@@ -76,20 +76,20 @@ export async function handleModelSelect(ctx: Context): Promise<boolean> {
     };
 
     // Select model and persist
-    selectModel(modelInfo);
+    selectModel(modelInfo, scopeKey);
 
     // Update keyboard manager state (may not be initialized if no session selected)
     keyboardManager.updateModel(modelInfo, scopeKey);
 
     // Refresh context limit for new model
-    await pinnedMessageManager.refreshContextLimit();
+    await pinnedMessageManager.refreshContextLimit(scopeKey);
 
     // Update Reply Keyboard with new model and context
-    const currentAgent = getStoredAgent();
+    const currentAgent = getStoredAgent(scopeKey);
     const contextInfo =
-      pinnedMessageManager.getContextInfo() ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      pinnedMessageManager.getContextInfo(scopeKey) ??
+      (pinnedMessageManager.getContextLimit(scopeKey) > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(scopeKey) }
         : keyboardManager.getContextInfo(scopeKey));
 
     if (contextInfo) {
@@ -169,7 +169,8 @@ export async function buildModelSelectionMenu(
  */
 export async function showModelSelectionMenu(ctx: Context): Promise<void> {
   try {
-    const currentModel = fetchCurrentModel();
+    const scopeKey = getScopeKeyFromContext(ctx);
+    const currentModel = fetchCurrentModel(scopeKey);
     const modelLists = await getModelSelectionLists();
     const keyboard = await buildModelSelectionMenu(currentModel, modelLists);
 

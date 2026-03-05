@@ -333,4 +333,12 @@ export const zh: I18nDictionary = {
     "🎤 语音识别尚未配置。\n\n在 .env 中设置 STT_API_URL 和 STT_API_KEY 以启用。",
   "stt.error": "🔴 识别音频失败：{error}",
   "stt.empty_result": "🎤 音频消息中未检测到语音。",
+
+  "start.welcome_dm":
+    "👋 私聊模式仅支持机器人/服务器状态与控制命令。\n\n请在群组话题线程中进行项目与会话工作。",
+  "status.global_overview": "📈 全局概览",
+  "status.global_projects": "项目数：{count}",
+  "status.global_sessions": "会话数：{count}",
+  "dm.restricted.command": "⚠️ 私聊中已禁用会话控制命令。请使用群组话题线程进行项目/会话工作。",
+  "dm.restricted.prompt": "⚠️ 私聊中已禁用任务输入。请使用群组话题线程运行 OpenCode 任务。",
 };

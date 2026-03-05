@@ -19,9 +19,9 @@ export async function newCommand(ctx: CommandContext<Context>) {
   try {
     const scope = getScopeFromContext(ctx);
     const scopeKey = scope?.key ?? "global";
-    const allowPinned = scope?.threadId === null;
+    const usePinned = ctx.chat?.type !== "private";
 
-    const currentProject = getCurrentProject();
+    const currentProject = getCurrentProject(scopeKey);
 
     if (!currentProject) {
       await ctx.reply(t("new.project_not_selected"));
@@ -53,33 +53,33 @@ export async function newCommand(ctx: CommandContext<Context>) {
     await ingestSessionInfoForCache(session);
 
     // Initialize pinned message manager and create pinned message
-    if (allowPinned && !pinnedMessageManager.isInitialized()) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+    if (usePinned && !pinnedMessageManager.isInitialized(scopeKey)) {
+      pinnedMessageManager.initialize(ctx.api, ctx.chat.id, scopeKey, scope?.threadId ?? null);
     }
 
     // Initialize keyboard manager if not already
     keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
 
-    if (allowPinned) {
+    if (usePinned) {
       try {
-        await pinnedMessageManager.onSessionChange(session.id, session.title);
+        await pinnedMessageManager.onSessionChange(session.id, session.title, scopeKey);
       } catch (err) {
         logger.error("[Bot] Error creating pinned message:", err);
       }
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
 
     // Get current state for keyboard
-    const currentAgent = getStoredAgent();
-    const currentModel = getStoredModel();
+    const currentAgent = getStoredAgent(scopeKey);
+    const currentModel = getStoredModel(scopeKey);
     const contextInfo =
-      (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+      (usePinned ? pinnedMessageManager.getContextInfo(scopeKey) : null) ??
       keyboardManager.getContextInfo(scopeKey) ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      (usePinned && pinnedMessageManager.getContextLimit(scopeKey) > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(scopeKey) }
         : null);
     const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(

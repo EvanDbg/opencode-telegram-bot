@@ -154,17 +154,17 @@ export async function getFavoriteModels(): Promise<FavoriteModel[]> {
  * Get current model from settings or fallback to config
  * @returns Current model info
  */
-export function fetchCurrentModel(): ModelInfo {
-  return getStoredModel();
+export function fetchCurrentModel(scopeKey: string = "global"): ModelInfo {
+  return getStoredModel(scopeKey);
 }
 
 /**
  * Select model and persist to settings
  * @param modelInfo Model to select
  */
-export function selectModel(modelInfo: ModelInfo): void {
+export function selectModel(modelInfo: ModelInfo, scopeKey: string = "global"): void {
   logger.info(`[ModelManager] Selected model: ${modelInfo.providerID}/${modelInfo.modelID}`);
-  setCurrentModel(modelInfo);
+  setCurrentModel(modelInfo, scopeKey);
 }
 
 /**
@@ -172,8 +172,8 @@ export function selectModel(modelInfo: ModelInfo): void {
  * ALWAYS returns a model - fallback to config if not found
  * @returns Current model info
  */
-export function getStoredModel(): ModelInfo {
-  const storedModel = getCurrentModel();
+export function getStoredModel(scopeKey: string = "global"): ModelInfo {
+  const storedModel = getCurrentModel(scopeKey);
 
   if (storedModel) {
     // Ensure variant is set (default to "default")

@@ -80,8 +80,11 @@ export async function processUserPrompt(
   fileParts: FilePartInput[] = [],
 ): Promise<boolean> {
   const { bot, ensureEventSubscription } = deps;
+  const scope = getScopeFromContext(ctx);
+  const scopeKey = scope?.key ?? "global";
+  const usePinned = ctx.chat?.type !== "private";
 
-  const currentProject = getCurrentProject();
+  const currentProject = getCurrentProject(scopeKey);
   if (!currentProject) {
     await ctx.reply(t("bot.project_not_selected"));
     return false;
@@ -89,13 +92,10 @@ export async function processUserPrompt(
 
   botInstance = bot;
   chatIdInstance = ctx.chat!.id;
-  const scope = getScopeFromContext(ctx);
-  const scopeKey = scope?.key ?? "global";
-  const allowPinned = scope?.threadId === null;
 
   // Initialize pinned message manager if not already
-  if (allowPinned && !pinnedMessageManager.isInitialized()) {
-    pinnedMessageManager.initialize(bot.api, ctx.chat!.id);
+  if (usePinned && !pinnedMessageManager.isInitialized(scopeKey)) {
+    pinnedMessageManager.initialize(bot.api, ctx.chat!.id, scopeKey, scope?.threadId ?? null);
   }
 
   // Initialize keyboard manager if not already
@@ -138,25 +138,25 @@ export async function processUserPrompt(
     await ingestSessionInfoForCache(session);
 
     // Create pinned message for new session
-    if (allowPinned) {
+    if (usePinned) {
       try {
-        await pinnedMessageManager.onSessionChange(session.id, session.title);
+        await pinnedMessageManager.onSessionChange(session.id, session.title, scopeKey);
       } catch (err) {
         logger.error("[Bot] Error creating pinned message for new session:", err);
       }
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
 
-    const currentAgent = getStoredAgent();
-    const currentModel = getStoredModel();
+    const currentAgent = getStoredAgent(scopeKey);
+    const currentModel = getStoredModel(scopeKey);
     const contextInfo =
-      (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+      (usePinned ? pinnedMessageManager.getContextInfo(scopeKey) : null) ??
       keyboardManager.getContextInfo(scopeKey) ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      (usePinned && pinnedMessageManager.getContextLimit(scopeKey) > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(scopeKey) }
         : null);
     const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(
@@ -175,9 +175,13 @@ export async function processUserPrompt(
     );
 
     // Ensure pinned message exists for existing session
-    if (allowPinned && !pinnedMessageManager.getState().messageId) {
+    if (usePinned && !pinnedMessageManager.getState(scopeKey).messageId) {
       try {
-        await pinnedMessageManager.onSessionChange(currentSession.id, currentSession.title);
+        await pinnedMessageManager.onSessionChange(
+          currentSession.id,
+          currentSession.title,
+          scopeKey,
+        );
       } catch (err) {
         logger.error("[Bot] Error creating pinned message for existing session:", err);
       }
@@ -197,8 +201,8 @@ export async function processUserPrompt(
   }
 
   try {
-    const currentAgent = getStoredAgent();
-    const storedModel = getStoredModel();
+    const currentAgent = getStoredAgent(scopeKey);
+    const storedModel = getStoredModel(scopeKey);
 
     // Build parts array with text and files
     const parts: Array<TextPartInput | FilePartInput> = [];

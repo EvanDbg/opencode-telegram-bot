@@ -51,6 +51,21 @@ Languages: English (`en`), Deutsch (`de`), Español (`es`), Русский (`ru`
 
 You'll also need your **Telegram User ID** — send any message to [@userinfobot](https://t.me/userinfobot) and it will reply with your numeric ID.
 
+### 1.1 Optional: Use a Group with Topic Threads
+
+If you want one chat with multiple coding lanes, use a Telegram supergroup with topics enabled:
+
+1. Add your bot to the group
+2. Enable **Topics** in group settings
+3. In [@BotFather](https://t.me/BotFather), run `/setprivacy` for your bot and choose **Disable**
+4. Create a topic thread and send a message in that thread to start working there
+
+Notes:
+
+- Each topic thread can be used as an independent session lane
+- The bot still accepts only the user configured in `TELEGRAM_ALLOWED_USER_ID`
+- If command suggestions do not appear immediately, send `/start` once in that chat
+
 ### 2. Start OpenCode Server
 
 Start the OpenCode server:

@@ -317,8 +317,9 @@ async function executeCommand(
     return;
   }
 
-  const currentAgent = getStoredAgent();
-  const storedModel = getStoredModel();
+  const scopeKey = getScopeKeyFromContext(ctx);
+  const currentAgent = getStoredAgent(scopeKey);
+  const storedModel = getStoredModel(scopeKey);
   const model =
     storedModel.providerID && storedModel.modelID
       ? `${storedModel.providerID}/${storedModel.modelID}`
@@ -367,7 +368,7 @@ async function executeCommand(
 export async function commandsCommand(ctx: CommandContext<Context>): Promise<void> {
   try {
     const scopeKey = getScopeKeyFromContext(ctx);
-    const currentProject = getCurrentProject();
+    const currentProject = getCurrentProject(scopeKey);
     if (!currentProject) {
       await ctx.reply(t("bot.project_not_selected"));
       return;

@@ -45,15 +45,15 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
       keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
 
     // Parse callback data: "variant:variantId"
     const variantId = callbackQuery.data.replace("variant:", "");
 
     // Get current model
-    const currentModel = getStoredModel();
+    const currentModel = getStoredModel(scopeKey);
 
     if (!currentModel.providerID || !currentModel.modelID) {
       logger.error("[VariantHandler] No model selected");
@@ -62,21 +62,21 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     }
 
     // Set variant
-    setCurrentVariant(variantId);
+    setCurrentVariant(variantId, scopeKey);
 
     // Re-read model after variant update
-    const updatedModel = getStoredModel();
+    const updatedModel = getStoredModel(scopeKey);
 
     // Update keyboard manager state
     keyboardManager.updateModel(updatedModel, scopeKey);
     keyboardManager.updateVariant(variantId, scopeKey);
 
     // Build keyboard with correct context info
-    const currentAgent = getStoredAgent();
+    const currentAgent = getStoredAgent(scopeKey);
     const contextInfo =
-      pinnedMessageManager.getContextInfo() ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      pinnedMessageManager.getContextInfo(scopeKey) ??
+      (pinnedMessageManager.getContextLimit(scopeKey) > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(scopeKey) }
         : keyboardManager.getContextInfo(scopeKey));
 
     if (contextInfo) {
@@ -161,14 +161,15 @@ export async function buildVariantSelectionMenu(
  */
 export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
   try {
-    const currentModel = getStoredModel();
+    const scopeKey = getScopeKeyFromContext(ctx);
+    const currentModel = getStoredModel(scopeKey);
 
     if (!currentModel.providerID || !currentModel.modelID) {
       await ctx.reply(t("variant.select_model_first"));
       return;
     }
 
-    const currentVariant = getCurrentVariant();
+    const currentVariant = getCurrentVariant(scopeKey);
     const keyboard = await buildVariantSelectionMenu(
       currentVariant,
       currentModel.providerID,

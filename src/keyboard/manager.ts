@@ -22,9 +22,9 @@ class KeyboardManager {
       return existing;
     }
 
-    const currentModel = getStoredModel();
+    const currentModel = getStoredModel(scopeKey);
     const state: KeyboardState = {
-      currentAgent: getStoredAgent(),
+      currentAgent: getStoredAgent(scopeKey),
       currentModel,
       contextInfo: null,
       variantName: formatVariantForButton(currentModel.variant || "default"),

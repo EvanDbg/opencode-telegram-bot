@@ -20,7 +20,7 @@ import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { config } from "../../config.js";
 import { ProjectInfo } from "../../settings/manager.js";
-import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
+import { getScopeKeyFromContext } from "../scope.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const PROJECT_PAGE_CALLBACK_PREFIX = "projects:page:";
@@ -112,9 +112,13 @@ function buildProjectsMenuText(
   })}`;
 }
 
-function buildProjectsKeyboard(projects: ProjectInfo[], page: number): InlineKeyboard {
+function buildProjectsKeyboard(
+  projects: ProjectInfo[],
+  page: number,
+  scopeKey: string,
+): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  const currentProject = getCurrentProject();
+  const currentProject = getCurrentProject(scopeKey);
   const pageSize = config.bot.projectsListLimit;
   const {
     page: normalizedPage,
@@ -154,8 +158,9 @@ function buildProjectsKeyboard(projects: ProjectInfo[], page: number): InlineKey
 function buildProjectsMenuView(
   projects: ProjectInfo[],
   page: number,
+  scopeKey: string,
 ): { text: string; keyboard: InlineKeyboard } {
-  const currentProject = getCurrentProject();
+  const currentProject = getCurrentProject(scopeKey);
   const pageSize = config.bot.projectsListLimit;
   const { page: normalizedPage, totalPages } = calculateProjectsPaginationRange(
     projects.length,
@@ -166,7 +171,7 @@ function buildProjectsMenuView(
 
   return {
     text: buildProjectsMenuText(currentProjectName, normalizedPage, totalPages),
-    keyboard: buildProjectsKeyboard(projects, normalizedPage),
+    keyboard: buildProjectsKeyboard(projects, normalizedPage, scopeKey),
   };
 }
 
@@ -181,6 +186,7 @@ function clearInteractionWithScope(reason: string, scopeKey: string): void {
 
 export async function projectsCommand(ctx: CommandContext<Context>) {
   try {
+    const scopeKey = getScopeKeyFromContext(ctx);
     await syncSessionDirectoryCache();
     const projects = await getProjects();
 
@@ -189,7 +195,7 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
       return;
     }
 
-    const { text, keyboard } = buildProjectsMenuView(projects, 0);
+    const { text, keyboard } = buildProjectsMenuView(projects, 0, scopeKey);
 
     await replyWithInlineMenu(ctx, {
       menuKind: "project",
@@ -204,7 +210,7 @@ export async function projectsCommand(ctx: CommandContext<Context>) {
 
 export async function handleProjectSelect(ctx: Context): Promise<boolean> {
   const scopeKey = getScopeKeyFromContext(ctx);
-  const allowPinned = getScopeFromContext(ctx)?.threadId === null;
+  const usePinned = ctx.chat?.type !== "private";
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data) {
     return false;
@@ -225,7 +231,7 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
         return true;
       }
 
-      const { text, keyboard } = buildProjectsMenuView(projects, page);
+      const { text, keyboard } = buildProjectsMenuView(projects, page, scopeKey);
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(text, {
         reply_markup: appendInlineMenuCancelButton(keyboard, "project"),
@@ -261,14 +267,14 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
       `[Bot] Project selected: ${selectedProject.name || selectedProject.worktree} (id: ${projectId})`,
     );
 
-    setCurrentProject(selectedProject);
+    setCurrentProject(selectedProject, scopeKey);
     clearSession(scopeKey);
     clearInteractionWithScope("project_switched", scopeKey);
 
     // Clear pinned message when switching projects
-    if (allowPinned) {
+    if (usePinned) {
       try {
-        await pinnedMessageManager.clear();
+        await pinnedMessageManager.clear(scopeKey);
       } catch (err) {
         logger.error("[Bot] Error clearing pinned message:", err);
       }
@@ -280,10 +286,10 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     }
 
     // Refresh context limit for current model
-    if (allowPinned) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (usePinned) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
-    const contextLimit = allowPinned ? pinnedMessageManager.getContextLimit() : 0;
+    const contextLimit = usePinned ? pinnedMessageManager.getContextLimit(scopeKey) : 0;
 
     // Reset context to 0 (no session selected) with current model's limit
     if (contextLimit > 0) {
@@ -293,8 +299,8 @@ export async function handleProjectSelect(ctx: Context): Promise<boolean> {
     }
 
     // Get current state for keyboard (with context = 0)
-    const currentAgent = getStoredAgent();
-    const currentModel = getStoredModel();
+    const currentAgent = getStoredAgent(scopeKey);
+    const currentModel = getStoredModel(scopeKey);
     const contextInfo = { tokensUsed: 0, tokensLimit: contextLimit };
     const variantName = formatVariantForButton(currentModel.variant || "default");
     const keyboard = createMainKeyboard(currentAgent, currentModel, contextInfo, variantName);

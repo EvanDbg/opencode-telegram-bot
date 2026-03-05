@@ -167,7 +167,7 @@ async function handlePermissionReply(
   callbackMessageId: number | null,
   scopeKey: string,
 ): Promise<void> {
-  const currentProject = getCurrentProject();
+  const currentProject = getCurrentProject(scopeKey);
   const currentSession = getCurrentSession(scopeKey);
   const chatId = ctx.chat?.id;
   const directory = currentSession?.directory ?? currentProject?.worktree;

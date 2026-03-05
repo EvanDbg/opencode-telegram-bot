@@ -17,7 +17,9 @@ import { getScopeFromContext, getScopeKeyFromContext } from "../scope.js";
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {
     const scopeKey = getScopeKeyFromContext(ctx);
-    const allowPinned = getScopeFromContext(ctx)?.threadId === null;
+    const scope = getScopeFromContext(ctx);
+    const usePinned = ctx.chat?.type !== "private";
+    const isPrivateChat = ctx.chat?.type === "private";
     const { data, error } = await opencodeClient.global.health();
 
     if (error || !data) {
@@ -43,18 +45,18 @@ export async function statusCommand(ctx: CommandContext<Context>) {
     }
 
     // Add agent mode information
-    const currentAgent = await fetchCurrentAgent();
+    const currentAgent = await fetchCurrentAgent(scopeKey);
     const agentDisplay = currentAgent
       ? getAgentDisplayName(currentAgent)
       : t("status.agent_not_set");
     message += `${t("status.line.mode", { mode: agentDisplay })}\n`;
 
     // Add model information
-    const currentModel = fetchCurrentModel();
+    const currentModel = fetchCurrentModel(scopeKey);
     const modelDisplay = formatModelForDisplay(currentModel.providerID, currentModel.modelID);
     message += `${t("status.line.model", { model: modelDisplay })}\n`;
 
-    const currentProject = getCurrentProject();
+    const currentProject = getCurrentProject(scopeKey);
     if (currentProject) {
       const projectName = currentProject.name || currentProject.worktree;
       message += `\n${t("status.project_selected", { project: projectName })}\n`;
@@ -71,24 +73,40 @@ export async function statusCommand(ctx: CommandContext<Context>) {
       message += t("status.session_hint");
     }
 
-    if (ctx.chat) {
-      if (allowPinned && !pinnedMessageManager.isInitialized()) {
-        pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+    if (isPrivateChat) {
+      const [projectsResult, sessionsResult] = await Promise.all([
+        opencodeClient.project.list(),
+        opencodeClient.session.list({ limit: 200 }),
+      ]);
+
+      const projectCount = projectsResult.data?.length ?? 0;
+      const sessionCount = sessionsResult.data?.length ?? 0;
+
+      message += `\n${t("status.global_overview")}\n`;
+      message += `${t("status.global_projects", { count: projectCount })}\n`;
+      message += `${t("status.global_sessions", { count: sessionCount })}`;
+    }
+
+    if (ctx.chat && !isPrivateChat) {
+      if (usePinned && !pinnedMessageManager.isInitialized(scopeKey)) {
+        pinnedMessageManager.initialize(ctx.api, ctx.chat.id, scopeKey, scope?.threadId ?? null);
       }
-      if (pinnedMessageManager.getContextLimit() === 0) {
-        await pinnedMessageManager.refreshContextLimit();
+      if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+        await pinnedMessageManager.refreshContextLimit(scopeKey);
       }
       keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
-    const contextInfo =
-      (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
-      keyboardManager.getContextInfo(scopeKey);
-    if (contextInfo) {
-      keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
-    } else if (pinnedMessageManager.getContextLimit() > 0) {
-      keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(), scopeKey);
+    if (!isPrivateChat) {
+      const contextInfo =
+        (usePinned ? pinnedMessageManager.getContextInfo(scopeKey) : null) ??
+        keyboardManager.getContextInfo(scopeKey);
+      if (contextInfo) {
+        keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
+      } else if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) > 0) {
+        keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(scopeKey), scopeKey);
+      }
     }
-    const keyboard = keyboardManager.getKeyboard(scopeKey);
+    const keyboard = isPrivateChat ? undefined : keyboardManager.getKeyboard(scopeKey);
     if (ctx.chat) {
       await sendMessageWithMarkdownFallback({
         api: ctx.api,

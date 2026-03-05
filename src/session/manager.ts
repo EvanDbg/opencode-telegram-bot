@@ -2,9 +2,7 @@ import {
   getCurrentSession as getSettingsSession,
   getScopedSessions,
   setCurrentSession as setSettingsSession,
-  setScopedSession,
   clearSession as clearSettingsSession,
-  clearScopedSession,
   SessionInfo,
 } from "../settings/manager.js";
 
@@ -53,11 +51,11 @@ export function setCurrentSession(
   scopeBySessionId.set(sessionInfo.id, scopeKey);
 
   if (scopeKey === GLOBAL_SCOPE_KEY) {
-    setSettingsSession(sessionInfo);
+    setSettingsSession(sessionInfo, scopeKey);
     return;
   }
 
-  setScopedSession(scopeKey, sessionInfo);
+  setSettingsSession(sessionInfo, scopeKey);
 }
 
 export function getCurrentSession(scopeKey: string = GLOBAL_SCOPE_KEY): SessionInfo | null {
@@ -76,11 +74,11 @@ export function clearSession(scopeKey: string = GLOBAL_SCOPE_KEY): void {
   sessionsByScope.delete(scopeKey);
 
   if (scopeKey === GLOBAL_SCOPE_KEY) {
-    clearSettingsSession();
+    clearSettingsSession(scopeKey);
     return;
   }
 
-  clearScopedSession(scopeKey);
+  clearSettingsSession(scopeKey);
 }
 
 export function getScopeForSession(sessionId: string): string | null {
@@ -93,11 +91,11 @@ export function registerSessionScope(sessionId: string, scopeKey: string): void 
   scopeBySessionId.set(sessionId, scopeKey);
 
   const sessionInfo = sessionsByScope.get(scopeKey);
-  if (!sessionInfo || sessionInfo.id !== sessionId || scopeKey === GLOBAL_SCOPE_KEY) {
+  if (!sessionInfo || sessionInfo.id !== sessionId) {
     return;
   }
 
-  setScopedSession(scopeKey, sessionInfo);
+  setSettingsSession(sessionInfo, scopeKey);
 }
 
 export function getSessionById(sessionId: string): SessionInfo | null {

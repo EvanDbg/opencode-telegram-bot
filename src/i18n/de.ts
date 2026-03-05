@@ -381,4 +381,14 @@ export const de: I18nDictionary = {
     "🎤 Spracherkennung ist nicht konfiguriert.\n\nSetze STT_API_URL und STT_API_KEY in .env, um sie zu aktivieren.",
   "stt.error": "🔴 Audio konnte nicht erkannt werden: {error}",
   "stt.empty_result": "🎤 Keine Sprache in der Audionachricht erkannt.",
+
+  "start.welcome_dm":
+    "👋 Der DM-Modus ist auf Bot-/Serverstatus und Steuerbefehle beschränkt.\n\nNutze einen Gruppen-Topic-Thread für Projekt-/Sitzungsarbeit.",
+  "status.global_overview": "📈 Globaler Überblick",
+  "status.global_projects": "Projekte: {count}",
+  "status.global_sessions": "Sitzungen: {count}",
+  "dm.restricted.command":
+    "⚠️ Sitzungs-Steuerbefehle sind im DM deaktiviert. Nutze einen Gruppen-Topic-Thread für Projekt-/Sitzungsarbeit.",
+  "dm.restricted.prompt":
+    "⚠️ Prompts sind im DM deaktiviert. Nutze einen Gruppen-Topic-Thread, um OpenCode-Aufgaben auszuführen.",
 };

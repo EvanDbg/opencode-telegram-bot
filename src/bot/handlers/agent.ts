@@ -40,24 +40,24 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
       keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
 
     const agentName = callbackQuery.data.replace("agent:", "");
 
     // Select agent and persist
-    selectAgent(agentName);
+    selectAgent(agentName, scopeKey);
 
     // Update keyboard manager state
     keyboardManager.updateAgent(agentName, scopeKey);
 
     // Update Reply Keyboard with new agent, current model, and context
-    const currentModel = getStoredModel();
+    const currentModel = getStoredModel(scopeKey);
     const contextInfo =
-      pinnedMessageManager.getContextInfo() ??
-      (pinnedMessageManager.getContextLimit() > 0
-        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit() }
+      pinnedMessageManager.getContextInfo(scopeKey) ??
+      (pinnedMessageManager.getContextLimit(scopeKey) > 0
+        ? { tokensUsed: 0, tokensLimit: pinnedMessageManager.getContextLimit(scopeKey) }
         : keyboardManager.getContextInfo(scopeKey));
 
     keyboardManager.updateModel(currentModel, scopeKey);
@@ -101,9 +101,12 @@ export async function handleAgentSelect(ctx: Context): Promise<boolean> {
  * @param currentAgent Current agent name for highlighting
  * @returns InlineKeyboard with agent selection buttons
  */
-export async function buildAgentSelectionMenu(currentAgent?: string): Promise<InlineKeyboard> {
+export async function buildAgentSelectionMenu(
+  scopeKey: string,
+  currentAgent?: string,
+): Promise<InlineKeyboard> {
   const keyboard = new InlineKeyboard();
-  const agents = await getAvailableAgents();
+  const agents = await getAvailableAgents(scopeKey);
 
   if (agents.length === 0) {
     logger.warn("[AgentHandler] No available agents found");
@@ -130,8 +133,9 @@ export async function buildAgentSelectionMenu(currentAgent?: string): Promise<In
  */
 export async function showAgentSelectionMenu(ctx: Context): Promise<void> {
   try {
-    const currentAgent = await fetchCurrentAgent();
-    const keyboard = await buildAgentSelectionMenu(currentAgent);
+    const scopeKey = getScopeKeyFromContext(ctx);
+    const currentAgent = await fetchCurrentAgent(scopeKey);
+    const keyboard = await buildAgentSelectionMenu(scopeKey, currentAgent);
 
     if (keyboard.inline_keyboard.length === 0) {
       await ctx.reply(t("agent.menu.empty"));

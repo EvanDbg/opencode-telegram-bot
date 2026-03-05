@@ -59,13 +59,18 @@ import { handleVoiceMessage } from "./handlers/voice.js";
 import { handleDocumentMessage } from "./handlers/document.js";
 import { downloadTelegramFile, toDataUri } from "./utils/file-download.js";
 import { sendMessageWithMarkdownFallback } from "./utils/send-with-markdown-fallback.js";
+import { extractCommandName } from "./utils/commands.js";
 import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
 import { getStoredModel } from "../model/manager.js";
+import { getCurrentProject } from "../settings/manager.js";
 import { getScopeFromContext, getThreadSendOptions } from "./scope.js";
+import { TelegramRateLimiter } from "./telegram-rate-limiter.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 
 let botInstance: Bot<Context> | null = null;
 const initializedCommandChats = new Set<number>();
+const DM_ALLOWED_COMMANDS = new Set(["start", "help", "status", "opencode_start", "opencode_stop"]);
+const telegramRateLimiter = new TelegramRateLimiter();
 
 const scopeTargets = new Map<string, { chatId: number; threadId: number | null }>();
 
@@ -74,6 +79,8 @@ function rememberScopeTarget(ctx: Context): void {
   if (!scope) {
     return;
   }
+
+  telegramRateLimiter.setActiveScopeKey(scope.key);
 
   scopeTargets.set(scope.key, {
     chatId: scope.chatId,
@@ -287,7 +294,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     try {
-      const message = formatToolInfo(toolInfo);
+      const target = getTargetBySessionId(toolInfo.sessionId);
+      const projectWorktree = target ? getCurrentProject(target.scopeKey)?.worktree : undefined;
+      const message = formatToolInfo(toolInfo, projectWorktree);
       if (message) {
         toolMessageBatcher.enqueue(toolInfo.sessionId, message);
       }
@@ -303,7 +312,9 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
 
     try {
-      const toolMessage = formatToolInfo(fileInfo);
+      const target = getTargetBySessionId(fileInfo.sessionId);
+      const projectWorktree = target ? getCurrentProject(target.scopeKey)?.worktree : undefined;
+      const toolMessage = formatToolInfo(fileInfo, projectWorktree);
       const caption = prepareDocumentCaption(toolMessage || fileInfo.fileData.caption);
 
       toolMessageBatcher.enqueueFile(fileInfo.sessionId, {
@@ -416,13 +427,13 @@ async function ensureEventSubscription(directory: string): Promise<void> {
       // Update keyboardManager SYNCHRONOUSLY before any await
       // This ensures keyboard has correct context when onComplete sends the reply
       const contextSize = tokens.input + tokens.cacheRead;
-      const contextLimit = pinnedMessageManager.getContextLimit();
+      const contextLimit = pinnedMessageManager.getContextLimit(target.scopeKey);
       if (contextLimit > 0) {
         keyboardManager.updateContext(contextSize, contextLimit, target.scopeKey);
       }
 
-      if (target.threadId === null && pinnedMessageManager.isInitialized()) {
-        await pinnedMessageManager.onMessageComplete(tokens);
+      if (pinnedMessageManager.isInitialized(target.scopeKey)) {
+        await pinnedMessageManager.onMessageComplete(tokens, target.scopeKey);
       }
     } catch (err) {
       logger.error("[Bot] Error updating pinned message with tokens:", err);
@@ -430,18 +441,14 @@ async function ensureEventSubscription(directory: string): Promise<void> {
   });
 
   summaryAggregator.setOnSessionCompacted(async (sessionId, directory) => {
-    if (!pinnedMessageManager.isInitialized()) {
-      return;
-    }
-
     const target = getTargetBySessionId(sessionId);
-    if (!target || target.threadId !== null) {
+    if (!target || !pinnedMessageManager.isInitialized(target.scopeKey)) {
       return;
     }
 
     try {
       logger.info(`[Bot] Session compacted, reloading context: ${sessionId}`);
-      await pinnedMessageManager.onSessionCompacted(sessionId, directory);
+      await pinnedMessageManager.onSessionCompacted(sessionId, directory, target.scopeKey);
     } catch (err) {
       logger.error("[Bot] Error reloading context after compaction:", err);
     }
@@ -489,29 +496,31 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     toolMessageBatcher.enqueueUniqueByPrefix(sessionId, retryMessage, SESSION_RETRY_PREFIX);
   });
 
-  summaryAggregator.setOnSessionDiff(async (_sessionId, diffs) => {
-    if (!pinnedMessageManager.isInitialized()) {
+  summaryAggregator.setOnSessionDiff(async (sessionId, diffs) => {
+    const target = getTargetBySessionId(sessionId);
+    if (!target || !pinnedMessageManager.isInitialized(target.scopeKey)) {
       return;
     }
 
     try {
-      await pinnedMessageManager.onSessionDiff(diffs);
+      await pinnedMessageManager.onSessionDiff(diffs, target.scopeKey);
     } catch (err) {
       logger.error("[Bot] Error updating session diff:", err);
     }
   });
 
-  summaryAggregator.setOnFileChange((change) => {
-    if (!pinnedMessageManager.isInitialized()) {
+  summaryAggregator.setOnFileChange((change, sessionId) => {
+    const target = getTargetBySessionId(sessionId);
+    if (!target || !pinnedMessageManager.isInitialized(target.scopeKey)) {
       return;
     }
-    pinnedMessageManager.addFileChange(change);
+    pinnedMessageManager.addFileChange(change, target.scopeKey);
   });
 
-  pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit) => {
+  pinnedMessageManager.setOnKeyboardUpdate(async (tokensUsed, tokensLimit, scopeKey) => {
     try {
       logger.debug(`[Bot] Updating keyboard with context: ${tokensUsed}/${tokensLimit}`);
-      keyboardManager.updateContext(tokensUsed, tokensLimit, "global");
+      keyboardManager.updateContext(tokensUsed, tokensLimit, scopeKey);
       // Don't send automatic keyboard updates - keyboard will update naturally with user messages
     } catch (err) {
       logger.error("[Bot] Error updating keyboard context:", err);
@@ -568,6 +577,10 @@ export function createBot(): Bot<Context> {
 
   const bot = new Bot(config.telegram.token, botOptions);
 
+  bot.api.config.use((prev, method, payload, signal) => {
+    return telegramRateLimiter.enqueue(method, payload, () => prev(method, payload, signal));
+  });
+
   // Heartbeat for diagnostics: verify the event loop is not blocked
   let heartbeatCounter = 0;
   setInterval(() => {
@@ -593,6 +606,8 @@ export function createBot(): Bot<Context> {
   });
 
   bot.use((ctx, next) => {
+    rememberScopeTarget(ctx);
+
     const hasCallbackQuery = !!ctx.callbackQuery;
     const hasMessage = !!ctx.message;
     const callbackData = ctx.callbackQuery?.data || "N/A";
@@ -605,6 +620,36 @@ export function createBot(): Bot<Context> {
   bot.use(authMiddleware);
   bot.use(ensureCommandsInitialized);
   bot.use(interactionGuardMiddleware);
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type !== "private") {
+      await next();
+      return;
+    }
+
+    const text = ctx.message?.text;
+    if (text) {
+      const commandName = extractCommandName(text);
+      if (commandName) {
+        if (DM_ALLOWED_COMMANDS.has(commandName)) {
+          await next();
+          return;
+        }
+
+        await ctx.reply(t("dm.restricted.command"));
+        return;
+      }
+
+      await ctx.reply(t("dm.restricted.prompt"));
+      return;
+    }
+
+    if (ctx.message?.photo || ctx.message?.document || ctx.message?.voice || ctx.message?.audio) {
+      await ctx.reply(t("dm.restricted.prompt"));
+      return;
+    }
+
+    await next();
+  });
 
   const blockMenuWhileInteractionActive = async (ctx: Context): Promise<boolean> => {
     const activeInteraction = interactionManager.getSnapshot(
@@ -818,7 +863,8 @@ export function createBot(): Bot<Context> {
       const largestPhoto = photos[photos.length - 1];
 
       // Check model capabilities
-      const storedModel = getStoredModel();
+      const scopeKey = getScopeFromContext(ctx)?.key ?? "global";
+      const storedModel = getStoredModel(scopeKey);
       const capabilities = await getModelCapabilities(storedModel.providerID, storedModel.modelID);
 
       if (!supportsInput(capabilities, "image")) {

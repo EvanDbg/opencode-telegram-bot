@@ -46,6 +46,8 @@ export const en = {
 
   "start.welcome":
     "👋 Welcome to OpenCode Telegram Bot!\n\nUse commands:\n/projects — select project\n/sessions — session list\n/new — new session\n/status — status\n/help — help\n\nUse the bottom buttons to select agent mode, model, and variant.",
+  "start.welcome_dm":
+    "👋 DM mode is limited to bot/server status and control commands.\n\nUse a group topic thread for project/session work.",
   "help.keyboard_hint":
     "💡 Use the bottom keyboard buttons for agent mode, model, variant, and context actions.",
   "help.text":
@@ -96,8 +98,16 @@ export const en = {
   "status.session_selected": "📋 Current session: {title}",
   "status.session_not_selected": "📋 Current session: not selected",
   "status.session_hint": "Use /sessions to select one or /new to create one",
+  "status.global_overview": "📈 Global overview",
+  "status.global_projects": "Projects: {count}",
+  "status.global_sessions": "Sessions: {count}",
   "status.server_unavailable":
     "🔴 OpenCode Server is unavailable\n\nUse /opencode_start to start the server.",
+
+  "dm.restricted.command":
+    "⚠️ Session control commands are disabled in DM. Use a group topic thread for project/session work.",
+  "dm.restricted.prompt":
+    "⚠️ Prompts are disabled in DM. Use a group topic thread to run OpenCode tasks.",
 
   "projects.empty":
     "📭 No projects found.\n\nOpen a directory in OpenCode and create at least one session, then it will appear here.",

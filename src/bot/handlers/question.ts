@@ -287,7 +287,7 @@ async function sendAllAnswersToAgent(
   scopeKey: string,
   threadId: number | null,
 ): Promise<void> {
-  const currentProject = getCurrentProject();
+  const currentProject = getCurrentProject(scopeKey);
   const currentSession = getCurrentSession(scopeKey);
   const requestID = questionManager.getRequestID(scopeKey);
   const totalQuestions = questionManager.getTotalQuestions(scopeKey);

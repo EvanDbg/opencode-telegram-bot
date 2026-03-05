@@ -145,7 +145,7 @@ function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineK
 export async function sessionsCommand(ctx: CommandContext<Context>) {
   try {
     const pageSize = config.bot.sessionsListLimit;
-    const currentProject = getCurrentProject();
+    const currentProject = getCurrentProject(getScopeKeyFromContext(ctx));
 
     if (!currentProject) {
       await ctx.reply(t("sessions.project_not_selected"));
@@ -181,7 +181,8 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
 
 export async function handleSessionSelect(ctx: Context): Promise<boolean> {
   const scopeKey = getScopeKeyFromContext(ctx);
-  const allowPinned = getScopeFromContext(ctx)?.threadId === null;
+  const scope = getScopeFromContext(ctx);
+  const usePinned = ctx.chat?.type !== "private";
   const callbackQuery = ctx.callbackQuery;
   if (!callbackQuery?.data || !callbackQuery.data.startsWith(SESSION_CALLBACK_PREFIX)) {
     return false;
@@ -196,7 +197,7 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
   }
 
   try {
-    const currentProject = getCurrentProject();
+    const currentProject = getCurrentProject(scopeKey);
 
     if (!currentProject) {
       clearInteractionWithScope("session_select_project_missing", scopeKey);
@@ -271,8 +272,8 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
     }
 
     // Initialize pinned message manager if not already
-    if (allowPinned && !pinnedMessageManager.isInitialized() && ctx.chat) {
-      pinnedMessageManager.initialize(ctx.api, ctx.chat.id);
+    if (usePinned && !pinnedMessageManager.isInitialized(scopeKey) && ctx.chat) {
+      pinnedMessageManager.initialize(ctx.api, ctx.chat.id, scopeKey, scope?.threadId ?? null);
     }
 
     // Initialize keyboard manager if not already
@@ -280,17 +281,21 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
       keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
     }
 
-    if (pinnedMessageManager.getContextLimit() === 0) {
-      await pinnedMessageManager.refreshContextLimit();
+    if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) === 0) {
+      await pinnedMessageManager.refreshContextLimit(scopeKey);
     }
 
-    if (allowPinned) {
+    if (usePinned) {
       try {
         // Create new pinned message for this session
-        await pinnedMessageManager.onSessionChange(session.id, session.title);
+        await pinnedMessageManager.onSessionChange(session.id, session.title, scopeKey);
         // Load context from session history (for existing sessions)
         // Wait for it to complete so keyboard has correct context
-        await pinnedMessageManager.loadContextFromHistory(session.id, currentProject.worktree);
+        await pinnedMessageManager.loadContextFromHistory(
+          session.id,
+          currentProject.worktree,
+          scopeKey,
+        );
       } catch (err) {
         logger.error("[Bot] Error initializing pinned message:", err);
       }
@@ -301,12 +306,12 @@ export async function handleSessionSelect(ctx: Context): Promise<boolean> {
 
       // Update keyboard with loaded context (callback executes async via setImmediate, so update manually)
       const contextInfo =
-        (allowPinned ? pinnedMessageManager.getContextInfo() : null) ??
+        (usePinned ? pinnedMessageManager.getContextInfo(scopeKey) : null) ??
         keyboardManager.getContextInfo(scopeKey);
       if (contextInfo) {
         keyboardManager.updateContext(contextInfo.tokensUsed, contextInfo.tokensLimit, scopeKey);
-      } else if (pinnedMessageManager.getContextLimit() > 0) {
-        keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(), scopeKey);
+      } else if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) > 0) {
+        keyboardManager.updateContext(0, pinnedMessageManager.getContextLimit(scopeKey), scopeKey);
       }
 
       // Delete loading message
