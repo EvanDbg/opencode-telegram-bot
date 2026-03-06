@@ -171,9 +171,22 @@ export class TelegramRateLimiter {
     let firstReadyIndex = -1;
     let minWaitMs = Number.POSITIVE_INFINITY;
     let minWaitIndex = 0;
+    const seenScopeKeys = new Set<string>();
 
     for (let index = 0; index < this.queue.length; index++) {
       const job = this.queue[index];
+
+      // Keep strict in-order delivery per scope.
+      // If a scope already has an earlier queued job, skip later jobs for the same scope
+      // until the head-of-line job is processed.
+      if (job.scopeKey) {
+        if (seenScopeKeys.has(job.scopeKey)) {
+          continue;
+        }
+
+        seenScopeKeys.add(job.scopeKey);
+      }
+
       const waitMs = this.getWaitMs(job, now);
 
       if (waitMs <= 0) {
@@ -278,6 +291,21 @@ export class TelegramRateLimiter {
     }
   }
 
+  private requeueRetryJob(job: QueueJob): void {
+    if (!job.scopeKey) {
+      this.queue.push(job);
+      return;
+    }
+
+    const sameScopeIndex = this.queue.findIndex((queued) => queued.scopeKey === job.scopeKey);
+    if (sameScopeIndex < 0) {
+      this.queue.push(job);
+      return;
+    }
+
+    this.queue.splice(sameScopeIndex, 0, job);
+  }
+
   private async processLoop(): Promise<void> {
     try {
       while (this.queue.length > 0) {
@@ -292,7 +320,7 @@ export class TelegramRateLimiter {
         const [job] = this.queue.splice(index, 1);
         const outcome = await this.executeJob(job);
         if (outcome === "retry") {
-          this.queue.push(job);
+          this.requeueRetryJob(job);
         }
       }
     } finally {

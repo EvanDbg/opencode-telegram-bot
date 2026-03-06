@@ -88,6 +88,27 @@ const renamedGeneralTopicChats = new Set<number>();
 const DM_ALLOWED_COMMAND_SET = new Set<string>(DM_ALLOWED_COMMANDS);
 const telegramRateLimiter = new TelegramRateLimiter();
 const eventCallbackByDirectory = new Map<string, (event: OpenCodeEvent) => void>();
+const sessionDeliveryTasks = new Map<string, Promise<void>>();
+
+function enqueueSessionDelivery(sessionId: string, task: () => Promise<void>): void {
+  const previousTask = sessionDeliveryTasks.get(sessionId) ?? Promise.resolve();
+  const nextTask = previousTask
+    .catch(() => undefined)
+    .then(task)
+    .catch((error) => {
+      logger.error("[Bot] Session delivery task failed", {
+        sessionId,
+        error,
+      });
+    })
+    .finally(() => {
+      if (sessionDeliveryTasks.get(sessionId) === nextTask) {
+        sessionDeliveryTasks.delete(sessionId);
+      }
+    });
+
+  sessionDeliveryTasks.set(sessionId, nextTask);
+}
 
 async function ensureGeneralTopicName(ctx: Context): Promise<void> {
   if (!ctx.chat || ctx.chat.type === CHAT_TYPE.PRIVATE) {
@@ -323,50 +344,52 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     toolMessageBatcher.clearAll("summary_aggregator_clear");
   });
 
-  summaryAggregator.setOnComplete(async (sessionId, messageText) => {
-    if (!botInstance) {
-      logger.error("Bot not available for sending message");
-      return;
-    }
-
-    const target = getTargetBySessionId(sessionId);
-    if (!target) {
-      return;
-    }
-
-    await toolMessageBatcher.flushSession(sessionId, "assistant_message_completed");
-
-    try {
-      const parts = formatSummary(messageText);
-      const assistantParseMode = getAssistantParseMode();
-
-      logger.debug(
-        `[Bot] Sending completed message to Telegram (chatId=${target.chatId}, parts=${parts.length})`,
-      );
-
-      for (let i = 0; i < parts.length; i++) {
-        const isLastPart = i === parts.length - 1;
-        const keyboard =
-          isLastPart && keyboardManager.isInitialized(target.scopeKey)
-            ? keyboardManager.getKeyboard(target.scopeKey)
-            : undefined;
-        const options = keyboard ? { reply_markup: keyboard } : undefined;
-
-        await sendMessageWithMarkdownFallback({
-          api: botInstance.api,
-          chatId: target.chatId,
-          text: parts[i],
-          options: {
-            ...(options || {}),
-            ...getThreadSendOptions(target.threadId),
-          },
-          parseMode: assistantParseMode,
-        });
+  summaryAggregator.setOnComplete((sessionId, messageText) => {
+    enqueueSessionDelivery(sessionId, async () => {
+      if (!botInstance) {
+        logger.error("Bot not available for sending message");
+        return;
       }
-    } catch (err) {
-      logger.error("Failed to send message to Telegram:", err);
-      logger.warn("[Bot] Assistant message delivery failed; keeping event processing active");
-    }
+
+      const target = getTargetBySessionId(sessionId);
+      if (!target) {
+        return;
+      }
+
+      await toolMessageBatcher.flushSession(sessionId, "assistant_message_completed");
+
+      try {
+        const parts = formatSummary(messageText);
+        const assistantParseMode = getAssistantParseMode();
+
+        logger.debug(
+          `[Bot] Sending completed message to Telegram (chatId=${target.chatId}, parts=${parts.length})`,
+        );
+
+        for (let i = 0; i < parts.length; i++) {
+          const isLastPart = i === parts.length - 1;
+          const keyboard =
+            isLastPart && keyboardManager.isInitialized(target.scopeKey)
+              ? keyboardManager.getKeyboard(target.scopeKey)
+              : undefined;
+          const options = keyboard ? { reply_markup: keyboard } : undefined;
+
+          await sendMessageWithMarkdownFallback({
+            api: botInstance.api,
+            chatId: target.chatId,
+            text: parts[i],
+            options: {
+              ...(options || {}),
+              ...getThreadSendOptions(target.threadId),
+            },
+            parseMode: assistantParseMode,
+          });
+        }
+      } catch (err) {
+        logger.error("Failed to send message to Telegram:", err);
+        logger.warn("[Bot] Assistant message delivery failed; keeping event processing active");
+      }
+    });
   });
 
   summaryAggregator.setOnTool(async (toolInfo) => {
@@ -416,36 +439,40 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     }
   });
 
-  summaryAggregator.setOnQuestion(async (sessionId, questions, requestID) => {
-    if (!botInstance) {
-      logger.error("Bot or chat ID not available for showing questions");
-      return;
-    }
-
-    await toolMessageBatcher.flushSession(sessionId, "question_asked");
-
-    const target = getTargetBySessionId(sessionId);
-    if (!target) {
-      return;
-    }
-
-    if (questionManager.isActive(target.scopeKey)) {
-      logger.warn("[Bot] Replacing active poll with a new one");
-
-      const previousMessageIds = questionManager.getMessageIds(target.scopeKey);
-      for (const messageId of previousMessageIds) {
-        await botInstance.api.deleteMessage(target.chatId, messageId).catch(() => {});
+  summaryAggregator.setOnQuestion((sessionId, questions, requestID) => {
+    enqueueSessionDelivery(sessionId, async () => {
+      if (!botInstance) {
+        logger.error("Bot or chat ID not available for showing questions");
+        return;
       }
 
-      clearAllInteractionState(
-        INTERACTION_CLEAR_REASON.QUESTION_REPLACED_BY_NEW_POLL,
-        target.scopeKey,
-      );
-    }
+      await toolMessageBatcher.flushSession(sessionId, "question_asked");
 
-    logger.info(`[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`);
-    questionManager.startQuestions(questions, requestID, target.scopeKey);
-    await showCurrentQuestion(botInstance.api, target.chatId, target.scopeKey, target.threadId);
+      const target = getTargetBySessionId(sessionId);
+      if (!target) {
+        return;
+      }
+
+      if (questionManager.isActive(target.scopeKey)) {
+        logger.warn("[Bot] Replacing active poll with a new one");
+
+        const previousMessageIds = questionManager.getMessageIds(target.scopeKey);
+        for (const messageId of previousMessageIds) {
+          await botInstance.api.deleteMessage(target.chatId, messageId).catch(() => {});
+        }
+
+        clearAllInteractionState(
+          INTERACTION_CLEAR_REASON.QUESTION_REPLACED_BY_NEW_POLL,
+          target.scopeKey,
+        );
+      }
+
+      logger.info(
+        `[Bot] Received ${questions.length} questions from agent, requestID=${requestID}`,
+      );
+      questionManager.startQuestions(questions, requestID, target.scopeKey);
+      await showCurrentQuestion(botInstance.api, target.chatId, target.scopeKey, target.threadId);
+    });
   });
 
   summaryAggregator.setOnQuestionError(async () => {
@@ -466,29 +493,31 @@ async function ensureEventSubscription(directory: string): Promise<void> {
     clearAllInteractionState(INTERACTION_CLEAR_REASON.QUESTION_ERROR, GLOBAL_SCOPE_KEY);
   });
 
-  summaryAggregator.setOnPermission(async (request) => {
-    if (!botInstance) {
-      logger.error("Bot or chat ID not available for showing permission request");
-      return;
-    }
+  summaryAggregator.setOnPermission((request) => {
+    enqueueSessionDelivery(request.sessionID, async () => {
+      if (!botInstance) {
+        logger.error("Bot or chat ID not available for showing permission request");
+        return;
+      }
 
-    const target = getTargetBySessionId(request.sessionID);
-    if (!target) {
-      return;
-    }
+      const target = getTargetBySessionId(request.sessionID);
+      if (!target) {
+        return;
+      }
 
-    await toolMessageBatcher.flushSession(request.sessionID, "permission_asked");
+      await toolMessageBatcher.flushSession(request.sessionID, "permission_asked");
 
-    logger.info(
-      `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
-    );
-    await showPermissionRequest(
-      botInstance.api,
-      target.chatId,
-      request,
-      target.scopeKey,
-      target.threadId,
-    );
+      logger.info(
+        `[Bot] Received permission request from agent: type=${request.permission}, requestID=${request.id}`,
+      );
+      await showPermissionRequest(
+        botInstance.api,
+        target.chatId,
+        request,
+        target.scopeKey,
+        target.threadId,
+      );
+    });
   });
 
   summaryAggregator.setOnTypingIndicator((sessionId) => {

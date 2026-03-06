@@ -32,6 +32,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
 
 vi.mock("../../../src/session/manager.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
+  getSessionById: vi.fn(() => null),
 }));
 
 vi.mock("../../../src/utils/safe-background-task.js", () => ({
@@ -94,6 +95,21 @@ function createPermissionCallbackContext(data: string, messageId: number): Conte
   } as unknown as Context;
 }
 
+function createPermissionCallbackWithoutMessage(data: string): Context {
+  return {
+    chat: { id: 777 },
+    callbackQuery: {
+      data,
+    } as Context["callbackQuery"],
+    answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+    deleteMessage: vi.fn().mockResolvedValue(undefined),
+    reply: vi.fn().mockResolvedValue(undefined),
+    api: {
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    },
+  } as unknown as Context;
+}
+
 function getCallbackData(button: unknown): string | undefined {
   if (!button || typeof button !== "object") {
     return undefined;
@@ -135,11 +151,11 @@ describe("bot/handlers/permission", () => {
 
     expect(replyMarkup.inline_keyboard).toHaveLength(3);
     expect(replyMarkup.inline_keyboard[0]?.[0]?.text).toBe(t("permission.button.allow"));
-    expect(getCallbackData(replyMarkup.inline_keyboard[0]?.[0])).toBe("permission:once");
+    expect(getCallbackData(replyMarkup.inline_keyboard[0]?.[0])).toBe("permission:once:perm-1");
     expect(replyMarkup.inline_keyboard[1]?.[0]?.text).toBe(t("permission.button.always"));
-    expect(getCallbackData(replyMarkup.inline_keyboard[1]?.[0])).toBe("permission:always");
+    expect(getCallbackData(replyMarkup.inline_keyboard[1]?.[0])).toBe("permission:always:perm-1");
     expect(replyMarkup.inline_keyboard[2]?.[0]?.text).toBe(t("permission.button.reject"));
-    expect(getCallbackData(replyMarkup.inline_keyboard[2]?.[0])).toBe("permission:reject");
+    expect(getCallbackData(replyMarkup.inline_keyboard[2]?.[0])).toBe("permission:reject:perm-1");
 
     expect(permissionManager.isActive()).toBe(true);
     expect(permissionManager.getRequestID(500)).toBe("perm-1");
@@ -226,6 +242,34 @@ describe("bot/handlers/permission", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
+  it("keeps permission request active when reply submission fails", async () => {
+    const botApi = createBotApi(610);
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-failed-reply"),
+      "global",
+      null,
+    );
+
+    mocked.permissionReplyMock.mockResolvedValueOnce({ error: new Error("reply failed") });
+
+    const ctx = createPermissionCallbackContext("permission:always:perm-failed-reply", 610);
+    const handled = await handlePermissionCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(mocked.permissionReplyMock).toHaveBeenCalledWith({
+      requestID: "perm-failed-reply",
+      directory: "D:/repo",
+      reply: "always",
+    });
+
+    expect(ctx.deleteMessage).not.toHaveBeenCalled();
+    expect(permissionManager.isActive()).toBe(true);
+    expect(permissionManager.getRequestID(610)).toBe("perm-failed-reply");
+    expect(interactionManager.getSnapshot()?.kind).toBe("permission");
+  });
+
   it("keeps permission interaction active until all requests are replied", async () => {
     const botApi = createBotApi(700);
 
@@ -276,6 +320,30 @@ describe("bot/handlers/permission", () => {
 
     expect(permissionManager.isActive()).toBe(false);
     expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("handles callback using request id fallback when message id is unavailable", async () => {
+    const botApi = createBotApi(710);
+    await showPermissionRequest(
+      botApi,
+      777,
+      createPermissionRequest("perm-fallback-id"),
+      "global",
+      null,
+    );
+
+    const ctx = createPermissionCallbackWithoutMessage("permission:once:perm-fallback-id");
+    const handled = await handlePermissionCallback(ctx);
+
+    expect(handled).toBe(true);
+    await flushMicrotasks();
+
+    expect(mocked.permissionReplyMock).toHaveBeenCalledWith({
+      requestID: "perm-fallback-id",
+      directory: "D:/repo",
+      reply: "once",
+    });
+    expect(permissionManager.isActive()).toBe(false);
   });
 
   it("clears states when permission message cannot be sent", async () => {

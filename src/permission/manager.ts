@@ -47,6 +47,20 @@ class PermissionManager {
     return this.getState(scopeKey).requestsByMessageId.get(messageId) ?? null;
   }
 
+  getRequestByID(
+    requestID: string,
+    scopeKey: string = "global",
+  ): { messageId: number; request: PermissionRequest } | null {
+    const entries = Array.from(this.getState(scopeKey).requestsByMessageId.entries());
+    for (const [messageId, request] of entries) {
+      if (request.id === requestID) {
+        return { messageId, request };
+      }
+    }
+
+    return null;
+  }
+
   getRequestID(messageId: number | null, scopeKey: string = "global"): string | null {
     return this.getRequest(messageId, scopeKey)?.id ?? null;
   }
@@ -93,6 +107,15 @@ class PermissionManager {
     );
 
     return request;
+  }
+
+  removeByRequestID(requestID: string, scopeKey: string = "global"): PermissionRequest | null {
+    const match = this.getRequestByID(requestID, scopeKey);
+    if (!match) {
+      return null;
+    }
+
+    return this.removeByMessageId(match.messageId, scopeKey);
   }
 
   getPendingCount(scopeKey: string = "global"): number {

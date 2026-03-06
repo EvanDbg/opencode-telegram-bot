@@ -18,6 +18,10 @@ export const INTERACTION_CLEAR_REASON = {
   PROJECT_SWITCHED: "project_switched",
   PROJECT_SELECT_ERROR: "project_select_error",
   SESSION_SELECT_ERROR: "session_select_error",
+  PERMISSION_NO_PENDING_REQUESTS: "permission_no_pending_requests",
+  PERMISSION_INACTIVE_CALLBACK: "permission_inactive_callback",
+  PERMISSION_INVALID_RUNTIME_CONTEXT: "permission_invalid_runtime_context",
+  PERMISSION_REPLIED: "permission_replied",
 } as const;
 
 export type InteractionClearReasonValue =
