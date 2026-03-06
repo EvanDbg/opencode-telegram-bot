@@ -43,11 +43,7 @@ import {
   TELEGRAM_CHAT_FIELD,
   TELEGRAM_ERROR_MARKER,
 } from "../constants.js";
-import {
-  getTopicBindingBySessionId,
-  getTopicBindingsByChat,
-  registerTopicSessionBinding,
-} from "../../topic/manager.js";
+import { getTopicBindingBySessionId, registerTopicSessionBinding } from "../../topic/manager.js";
 import { TOPIC_COLORS } from "../../topic/colors.js";
 import { formatTopicTitle } from "../../topic/title-format.js";
 import { buildTopicThreadLink } from "../utils/topic-link.js";
@@ -121,29 +117,6 @@ function isGeneralForumScope(ctx: Context): boolean {
     scope?.context === SCOPE_CONTEXT.GROUP_GENERAL &&
     (scope.threadId === null || scope.threadId === GENERAL_TOPIC_THREAD_ID),
   );
-}
-
-function formatGeneralOverview(chatId: number): string {
-  const bindings = getTopicBindingsByChat(chatId).filter(
-    (binding) => binding.threadId !== GENERAL_TOPIC_THREAD_ID,
-  );
-
-  if (bindings.length === 0) {
-    return t(BOT_I18N_KEY.SESSIONS_GENERAL_EMPTY);
-  }
-
-  const lines = [t(BOT_I18N_KEY.SESSIONS_GENERAL_OVERVIEW)];
-  for (const binding of bindings) {
-    lines.push(
-      t(BOT_I18N_KEY.SESSIONS_GENERAL_ITEM, {
-        topic: binding.topicName ?? String(binding.threadId),
-        thread: String(binding.threadId),
-        status: binding.status,
-      }),
-    );
-  }
-
-  return lines.join("\n");
 }
 
 function getErrorText(error: unknown): string {
@@ -237,15 +210,6 @@ export async function sessionsCommand(ctx: CommandContext<Context>) {
         getThreadSendOptions(scope?.threadId ?? null),
       );
       return;
-    }
-
-    const isGeneralScope = Boolean(ctx.chat && isGeneralForumScope(ctx));
-
-    if (ctx.chat && isGeneralScope) {
-      await ctx.reply(
-        formatGeneralOverview(ctx.chat.id),
-        getThreadSendOptions(scope?.threadId ?? null),
-      );
     }
 
     const pageSize = config.bot.sessionsListLimit;
