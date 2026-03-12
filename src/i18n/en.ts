@@ -64,10 +64,13 @@ export const en = {
     "🔴 Failed to create session. Try /new or check server status with /status.",
   "bot.session_created": "✅ Session created: {title}",
   "bot.session_busy":
-    "⏳ Agent is already running a task. Wait for completion or use /stop to interrupt current run.",
+    "⏳ Your last request is still running, so this new one was not started.\n\nWhy this happened: OpenCode accepts one active run per session.\nWhat to do: wait for the current reply, or use /stop if it seems stuck, then send your message again.",
   "bot.session_reset_project_mismatch":
     "⚠️ Active session does not match the selected project, so it was reset. Use /sessions to pick one or /new to create a new session.",
-  "bot.prompt_send_error": "Failed to send request to OpenCode.",
+  "bot.prompt_send_error":
+    "⚠️ I could not deliver this message to OpenCode.\n\nLikely cause: a temporary connection hiccup between the bot and OpenCode server.\nWhat to do: send the message again. If it keeps happening, run /status and check that OpenCode is reachable.",
+  "bot.prompt_send_error_session_not_found":
+    "⚠️ I could not deliver this message because the active session is no longer available.\n\nWhy this happened: the session may have been reset, changed, or removed.\nWhat to do: choose a session with /sessions or create a new one with /new, then resend your message.",
   "bot.session_error": "🔴 OpenCode returned an error: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nProvider keeps returning the same error on repeated retries. Use /stop to abort.",

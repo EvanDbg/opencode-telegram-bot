@@ -54,10 +54,14 @@ export const zh: I18nDictionary = {
   "bot.creating_session": "🔄 正在创建新会话...",
   "bot.create_session_error": "🔴 创建会话失败。请重试 /new，或使用 /status 检查服务器状态。",
   "bot.session_created": "✅ 会话已创建：{title}",
-  "bot.session_busy": "⏳ 代理正在执行任务。请等待完成，或使用 /stop 中断当前运行。",
+  "bot.session_busy":
+    "⏳ 你上一条请求还在执行，所以这条新请求没有启动。\n\n原因：OpenCode 在同一个会话里一次只允许一个运行中的任务。\n建议：先等待当前回复；如果看起来卡住了，先用 /stop，再重新发送消息。",
   "bot.session_reset_project_mismatch":
     "⚠️ 活动会话与所选项目不匹配，因此已重置。使用 /sessions 选择一个会话，或 /new 创建新会话。",
-  "bot.prompt_send_error": "向 OpenCode 发送请求失败。",
+  "bot.prompt_send_error":
+    "⚠️ 这条消息没有成功发送到 OpenCode。\n\n可能原因：机器人与 OpenCode 服务器之间出现了临时连接问题。\n建议：请重发一次；如果持续出现，请运行 /status 检查 OpenCode 是否可达。",
+  "bot.prompt_send_error_session_not_found":
+    "⚠️ 这条消息发送失败，因为当前活动会话已不可用。\n\n原因：该会话可能已被重置、切换或删除。\n建议：先用 /sessions 选择会话，或用 /new 创建新会话，然后再重发消息。",
   "bot.session_error": "🔴 OpenCode 返回错误：{message}",
   "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /stop 可停止。",
   "bot.unknown_command": "⚠️ 未知命令：{command}。使用 /help 查看可用命令。",

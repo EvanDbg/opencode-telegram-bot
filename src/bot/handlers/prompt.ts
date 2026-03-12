@@ -1,6 +1,7 @@
 import { Bot, Context } from "grammy";
 import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import { opencodeClient } from "../../opencode/client.js";
+import { classifyPromptSubmitError } from "../../opencode/prompt-submit-error.js";
 import { clearSession, getCurrentSession, setCurrentSession } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
@@ -279,44 +280,61 @@ export async function processUserPrompt(
     };
 
     logger.info(
-      `[Bot] Calling session.prompt (fire-and-forget) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
+      `[Bot] Calling session.promptAsync (fire-and-forget) with agent=${currentAgent}, fileCount=${fileParts.length}...`,
     );
 
-    // CRITICAL: DO NOT wait for session.prompt to complete.
+    // CRITICAL: DO NOT wait for session.promptAsync to complete.
     // If we wait, the handler will not finish and grammY will not call getUpdates,
     // which blocks receiving button callback_query updates.
     // The processing result will arrive via SSE events.
     safeBackgroundTask({
-      taskName: "session.prompt",
-      task: () => opencodeClient.session.prompt(promptOptions),
+      taskName: "session.promptAsync",
+      task: () => opencodeClient.session.promptAsync(promptOptions),
       onSuccess: ({ error }) => {
         if (error) {
           const details = formatErrorDetails(error, 6000);
+          const errorType = classifyPromptSubmitError(error);
           logger.error(
-            "[Bot] OpenCode API returned an error for session.prompt",
+            "[Bot] OpenCode API returned an error for session.promptAsync",
             promptErrorLogContext,
           );
-          logger.error("[Bot] session.prompt error details:", details);
-          logger.error("[Bot] session.prompt raw API error object:", error);
+          logger.error("[Bot] session.promptAsync error details:", details);
+          logger.error("[Bot] session.promptAsync raw API error object:", error);
+
+          const errorMessageKey =
+            errorType === "busy"
+              ? "bot.session_busy"
+              : errorType === "session_not_found"
+                ? "bot.prompt_send_error_session_not_found"
+                : "bot.prompt_send_error";
 
           // Send user-friendly error via API directly because ctx is no longer available
           void bot.api
-            .sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+            .sendMessage(ctx.chat!.id, t(errorMessageKey), {
               ...getThreadSendOptions(scope?.threadId ?? null),
             })
             .catch(() => {});
           return;
         }
 
-        logger.info("[Bot] session.prompt completed");
+        logger.info("[Bot] session.promptAsync accepted");
       },
       onError: (error) => {
         const details = formatErrorDetails(error, 6000);
-        logger.error("[Bot] session.prompt background task failed", promptErrorLogContext);
-        logger.error("[Bot] session.prompt background failure details:", details);
-        logger.error("[Bot] session.prompt raw background error object:", error);
+        const errorType = classifyPromptSubmitError(error);
+        logger.error("[Bot] session.promptAsync background task failed", promptErrorLogContext);
+        logger.error("[Bot] session.promptAsync background failure details:", details);
+        logger.error("[Bot] session.promptAsync raw background error object:", error);
+
+        const errorMessageKey =
+          errorType === "busy"
+            ? "bot.session_busy"
+            : errorType === "session_not_found"
+              ? "bot.prompt_send_error_session_not_found"
+              : "bot.prompt_send_error";
+
         void bot.api
-          .sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+          .sendMessage(ctx.chat!.id, t(errorMessageKey), {
             ...getThreadSendOptions(scope?.threadId ?? null),
           })
           .catch(() => {});

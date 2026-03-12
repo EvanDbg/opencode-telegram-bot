@@ -4,7 +4,7 @@ import { createNewCommand } from "../../../src/bot/commands/new.js";
 
 const mocked = vi.hoisted(() => ({
   sessionCreateMock: vi.fn(),
-  sessionPromptMock: vi.fn(),
+  sessionPromptAsyncMock: vi.fn(),
   sessionGetMock: vi.fn(),
   setCurrentProjectMock: vi.fn(),
   setCurrentSessionMock: vi.fn(),
@@ -56,7 +56,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       create: mocked.sessionCreateMock,
-      prompt: mocked.sessionPromptMock,
+      promptAsync: mocked.sessionPromptAsyncMock,
       get: mocked.sessionGetMock,
     },
   },
@@ -199,7 +199,7 @@ function createContext(text = "/new Audit branches"): Context {
 describe("bot/commands/new", () => {
   beforeEach(() => {
     mocked.sessionCreateMock.mockReset();
-    mocked.sessionPromptMock.mockReset();
+    mocked.sessionPromptAsyncMock.mockReset();
     mocked.sessionGetMock.mockReset();
     mocked.setCurrentProjectMock.mockReset();
     mocked.setCurrentSessionMock.mockReset();
@@ -287,7 +287,7 @@ describe("bot/commands/new", () => {
     );
 
     const promptTask = mocked.safeBackgroundTaskMock.mock.calls.find(
-      ([options]) => options.taskName === "new.session.prompt",
+      ([options]) => options.taskName === "new.session.promptAsync",
     )?.[0];
     expect(promptTask).toBeDefined();
   });
@@ -300,7 +300,7 @@ describe("bot/commands/new", () => {
     await command(ctx as never);
 
     const promptTask = mocked.safeBackgroundTaskMock.mock.calls.find(
-      ([options]) => options.taskName === "new.session.prompt",
+      ([options]) => options.taskName === "new.session.promptAsync",
     )?.[0] as { onSuccess?: (value: { error: unknown }) => Promise<void> };
 
     expect(promptTask.onSuccess).toBeTypeOf("function");

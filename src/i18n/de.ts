@@ -65,10 +65,13 @@ export const de: I18nDictionary = {
     "🔴 Sitzung konnte nicht erstellt werden. Versuche /new oder prüfe den Serverstatus mit /status.",
   "bot.session_created": "✅ Sitzung erstellt: {title}",
   "bot.session_busy":
-    "⏳ Agent führt bereits eine Aufgabe aus. Warte auf Abschluss oder nutze /stop, um den aktuellen Lauf zu unterbrechen.",
+    "⏳ Deine letzte Anfrage wird noch verarbeitet, deshalb wurde diese neue nicht gestartet.\n\nWarum das passiert ist: OpenCode erlaubt pro Sitzung nur einen aktiven Lauf gleichzeitig.\nWas du tun kannst: warte auf die aktuelle Antwort oder nutze /stop, wenn es festhängt, und sende die Nachricht dann erneut.",
   "bot.session_reset_project_mismatch":
     "⚠️ Die aktive Sitzung passt nicht zum ausgewählten Projekt und wurde daher zurückgesetzt. Nutze /sessions zur Auswahl oder /new, um eine neue Sitzung zu erstellen.",
-  "bot.prompt_send_error": "Anfrage konnte nicht an OpenCode gesendet werden.",
+  "bot.prompt_send_error":
+    "⚠️ Ich konnte diese Nachricht nicht an OpenCode senden.\n\nWahrscheinliche Ursache: eine vorübergehende Verbindungsstörung zwischen Bot und OpenCode-Server.\nWas du tun kannst: sende die Nachricht erneut. Wenn es weiter passiert, nutze /status und prüfe, ob OpenCode erreichbar ist.",
+  "bot.prompt_send_error_session_not_found":
+    "⚠️ Ich konnte diese Nachricht nicht senden, weil die aktive Sitzung nicht mehr verfügbar ist.\n\nWarum das passiert ist: die Sitzung wurde möglicherweise zurückgesetzt, gewechselt oder gelöscht.\nWas du tun kannst: wähl eine Sitzung mit /sessions oder erstelle eine neue mit /new und sende die Nachricht dann erneut.",
   "bot.session_error": "🔴 OpenCode meldete einen Fehler: {message}",
   "bot.session_retry":
     "🔁 {message}\n\nDer Provider liefert bei wiederholten Versuchen immer wieder denselben Fehler. Mit /stop abbrechen.",

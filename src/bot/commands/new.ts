@@ -1,5 +1,6 @@
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
+import { classifyPromptSubmitError } from "../../opencode/prompt-submit-error.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import {
@@ -279,29 +280,45 @@ export function createNewCommand(deps: NewCommandDeps) {
         }
 
         safeBackgroundTask({
-          taskName: "new.session.prompt",
-          task: () => opencodeClient.session.prompt(promptOptions),
+          taskName: "new.session.promptAsync",
+          task: () => opencodeClient.session.promptAsync(promptOptions),
           onSuccess: async ({ error: promptError }) => {
             if (!promptError) {
               return;
             }
 
-            logger.error("[Bot] OpenCode API returned an error for /new prompt", {
+            const errorType = classifyPromptSubmitError(promptError);
+            const errorMessageKey =
+              errorType === "busy"
+                ? "bot.session_busy"
+                : errorType === "session_not_found"
+                  ? "bot.prompt_send_error_session_not_found"
+                  : "bot.prompt_send_error";
+
+            logger.error("[Bot] OpenCode API returned an error for /new promptAsync", {
               sessionId: session.id,
               promptError,
             });
 
-            await ctx.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+            await ctx.api.sendMessage(ctx.chat!.id, t(errorMessageKey), {
               ...getThreadSendOptions(topicThreadId),
             });
           },
           onError: async (promptError) => {
-            logger.error("[Bot] Failed to send prompt from /new", {
+            const errorType = classifyPromptSubmitError(promptError);
+            const errorMessageKey =
+              errorType === "busy"
+                ? "bot.session_busy"
+                : errorType === "session_not_found"
+                  ? "bot.prompt_send_error_session_not_found"
+                  : "bot.prompt_send_error";
+
+            logger.error("[Bot] Failed to send promptAsync from /new", {
               sessionId: session.id,
               promptError,
             });
 
-            await ctx.api.sendMessage(ctx.chat!.id, t("bot.prompt_send_error"), {
+            await ctx.api.sendMessage(ctx.chat!.id, t(errorMessageKey), {
               ...getThreadSendOptions(topicThreadId),
             });
           },
