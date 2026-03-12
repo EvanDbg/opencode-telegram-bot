@@ -5,6 +5,9 @@ import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { pinnedMessageManager } from "../../pinned/manager.js";
 import { keyboardManager } from "../../keyboard/manager.js";
+import { abortCurrentOperation } from "./abort.js";
+import { clearSession } from "../../session/manager.js";
+import { clearProject } from "../../settings/manager.js";
 import { t } from "../../i18n/index.js";
 import { SCOPE_CONTEXT, getScopeFromContext } from "../scope.js";
 
@@ -13,8 +16,10 @@ export async function startCommand(ctx: Context): Promise<void> {
   const scopeKey = scope?.key ?? "global";
   const usePinned = ctx.chat?.type !== "private";
   const isPrivateChat = ctx.chat?.type === "private";
+  const isTopicScope = scope?.context === SCOPE_CONTEXT.GROUP_TOPIC;
 
   if (isPrivateChat) {
+    await abortCurrentOperation(ctx, { notifyUser: false });
     await ctx.reply(`${t("start.welcome")}\n\n${t("start.welcome_dm")}`, {
       reply_markup: createDmKeyboard(),
     });
@@ -26,6 +31,21 @@ export async function startCommand(ctx: Context): Promise<void> {
       pinnedMessageManager.initialize(ctx.api, ctx.chat.id, scopeKey, scope?.threadId ?? null);
     }
     keyboardManager.initialize(ctx.api, ctx.chat.id, scopeKey);
+  }
+
+  await abortCurrentOperation(ctx, { notifyUser: false });
+
+  if (!isTopicScope) {
+    clearSession(scopeKey);
+    clearProject(scopeKey);
+    keyboardManager.clearContext(scopeKey);
+
+    if (usePinned) {
+      await pinnedMessageManager.clear(scopeKey);
+      if (!pinnedMessageManager.isInitialized(scopeKey) && ctx.chat) {
+        pinnedMessageManager.initialize(ctx.api, ctx.chat.id, scopeKey, scope?.threadId ?? null);
+      }
+    }
   }
 
   if (usePinned && pinnedMessageManager.getContextLimit(scopeKey) === 0) {

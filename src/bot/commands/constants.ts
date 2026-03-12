@@ -3,7 +3,7 @@ export const BOT_COMMAND = {
   HELP: "help",
   STATUS: "status",
   NEW: "new",
-  STOP: "stop",
+  ABORT: "abort",
   SESSIONS: "sessions",
   PROJECTS: "projects",
   RENAME: "rename",

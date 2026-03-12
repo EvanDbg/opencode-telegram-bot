@@ -115,6 +115,10 @@ export function resolveInteractionGuardDecision(ctx: Context): GuardDecision {
   }
 
   if (inputType === "command") {
+    if (command === "/start") {
+      return createAllowDecision(inputType, state, command);
+    }
+
     if (command && state.allowedCommands.includes(command)) {
       return createAllowDecision(inputType, state, command);
     }

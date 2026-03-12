@@ -3,6 +3,7 @@ import type { I18nDictionary } from "./en.js";
 export const zh: I18nDictionary = {
   "cmd.description.status": "服务器和会话状态",
   "cmd.description.new": "创建新会话",
+  "cmd.description.abort": "中止当前操作",
   "cmd.description.stop": "停止当前操作",
   "cmd.description.sessions": "列出会话",
   "cmd.description.projects": "列出项目",
@@ -44,7 +45,7 @@ export const zh: I18nDictionary = {
   "common.unknown_error": "未知错误",
 
   "start.welcome":
-    "👋 欢迎使用 OpenCode Telegram Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
+    "👋 欢迎使用 OpenCode Telegram Group Topics Bot！\n\n可用命令：\n/projects — 选择项目\n/sessions — 会话列表\n/new — 新建会话\n/status — 状态\n/help — 帮助\n\n请使用底部按钮选择模式、模型和变体。",
   "help.keyboard_hint": "💡 代理模式、模型、变体和上下文操作请使用底部键盘按钮。",
   "help.text":
     "📖 **帮助**\n\n/status - 查看服务器状态\n/sessions - 会话列表\n/new - 创建新会话\n/help - 帮助",
@@ -55,7 +56,7 @@ export const zh: I18nDictionary = {
   "bot.create_session_error": "🔴 创建会话失败。请重试 /new，或使用 /status 检查服务器状态。",
   "bot.session_created": "✅ 会话已创建：{title}",
   "bot.session_busy":
-    "⏳ 你上一条请求还在执行，所以这条新请求没有启动。\n\n原因：OpenCode 在同一个会话里一次只允许一个运行中的任务。\n建议：先等待当前回复；如果看起来卡住了，先用 /stop，再重新发送消息。",
+    "⏳ 你上一条请求还在执行，所以这条新请求没有启动。\n\n原因：OpenCode 在同一个会话里一次只允许一个运行中的任务。\n建议：先等待当前回复；如果看起来卡住了，先用 /abort，再重新发送消息。",
   "bot.session_reset_project_mismatch":
     "⚠️ 活动会话与所选项目不匹配，因此已重置。使用 /sessions 选择一个会话，或 /new 创建新会话。",
   "bot.prompt_send_error":
@@ -63,7 +64,7 @@ export const zh: I18nDictionary = {
   "bot.prompt_send_error_session_not_found":
     "⚠️ 这条消息发送失败，因为当前活动会话已不可用。\n\n原因：该会话可能已被重置、切换或删除。\n建议：先用 /sessions 选择会话，或用 /new 创建新会话，然后再重发消息。",
   "bot.session_error": "🔴 OpenCode 返回错误：{message}",
-  "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /stop 可停止。",
+  "bot.session_retry": "🔁 {message}\n\n提供方在重复重试时持续返回同一错误。使用 /abort 可停止。",
   "bot.unknown_command": "⚠️ 未知命令：{command}。使用 /help 查看可用命令。",
   "bot.photo_downloading": "⏳ 正在下载照片...",
   "bot.photo_too_large": "⚠️ 照片过大（最大 {maxSizeMb}MB）",
@@ -159,13 +160,13 @@ export const zh: I18nDictionary = {
   "stop.no_active_session": "🛑 代理尚未启动\n\n使用 /new 创建会话，或通过 /sessions 选择一个。",
   "stop.in_progress": "🛑 已停止事件流，正在发送中止信号...\n\n等待代理停止。",
   "stop.warn_unconfirmed":
-    "⚠️ 事件流已停止，但服务器未确认中止。\n\n检查 /status，并在几秒后重试 /stop。",
+    "⚠️ 事件流已停止，但服务器未确认中止。\n\n检查 /status，并在几秒后重试 /abort。",
   "stop.warn_maybe_finished": "⚠️ 事件流已停止，但代理可能已完成。",
   "stop.success": "✅ 代理操作已中断。本次运行的后续消息将不再发送。",
   "stop.warn_still_busy": "⚠️ 信号已发送，但代理仍在忙。\n\n事件流已禁用，因此不会发送中间消息。",
-  "stop.warn_timeout": "⚠️ 中止请求超时。\n\n事件流已禁用，请在几秒后重试 /stop。",
+  "stop.warn_timeout": "⚠️ 中止请求超时。\n\n事件流已禁用，请在几秒后重试 /abort。",
   "stop.warn_local_only": "⚠️ 已在本地停止事件流，但服务器端中止失败。",
-  "stop.error": "🔴 停止操作失败。\n\n事件流已停止，请再次尝试 /stop。",
+  "stop.error": "🔴 停止操作失败。\n\n事件流已停止，请再次尝试 /abort。",
 
   "opencode_start.already_running_managed":
     "⚠️ OpenCode 服务器已在运行\n\nPID：{pid}\n运行时间：{seconds} 秒",
@@ -312,12 +313,16 @@ export const zh: I18nDictionary = {
   "runtime.wizard.user_id_invalid": "请输入一个正整数（> 0）。\n",
   "runtime.wizard.ask_api_url":
     "请输入 OpenCode API URL（可选）。\n按 Enter 使用默认值：{defaultUrl}\n> ",
+  "runtime.wizard.ask_server_username":
+    "请输入 OpenCode 服务器用户名（可选）。\n按 Enter 使用默认值：{defaultUsername}\n> ",
+  "runtime.wizard.ask_server_password":
+    "请输入 OpenCode 服务器密码（可选，输入隐藏）。\n按 Enter 跳过。\n> ",
   "runtime.wizard.api_url_invalid": "请输入有效 URL（http/https），或按 Enter 使用默认值。\n",
-  "runtime.wizard.start": "OpenCode Telegram Bot 设置。\n",
+  "runtime.wizard.start": "OpenCode Telegram Group Topics Bot 设置。\n",
   "runtime.wizard.saved": "配置已保存：\n- {envPath}\n- {settingsPath}\n",
   "runtime.wizard.not_configured_starting": "应用尚未配置。正在启动向导...\n",
   "runtime.wizard.tty_required":
-    "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram config`。",
+    "交互式向导需要 TTY 终端。请在交互式 shell 中运行 `opencode-telegram-group-topics-bot config`。",
 
   "rename.no_session": "⚠️ 没有活动会话。请先创建或选择一个会话。",
   "rename.prompt": "📝 请输入会话的新标题：\n\n当前：{title}",
@@ -348,7 +353,7 @@ export const zh: I18nDictionary = {
   "cmd.description.rename": "重命名当前会话",
 
   "cli.usage":
-    "用法：\n  opencode-telegram [start] [--mode sources|installed]\n  opencode-telegram status\n  opencode-telegram stop\n  opencode-telegram config\n\n说明：\n  - 不带命令时默认执行 `start`\n  - `--mode` 目前仅支持 `start` 命令",
+    "用法：\n  opencode-telegram-group-topics-bot [start] [--mode sources|installed]\n  opencode-telegram-group-topics-bot status\n  opencode-telegram-group-topics-bot stop\n  opencode-telegram-group-topics-bot config [--mode sources|installed]\n\n说明：\n  - 不带命令时默认执行 `start`\n  - `config` 默认使用 `installed` 模式，除非显式传入 `--mode sources`",
   "cli.placeholder.status":
     "命令 `status` 目前是占位符。真实状态检查将会在 service 层（阶段 5）添加。",
   "cli.placeholder.stop":
@@ -359,7 +364,7 @@ export const zh: I18nDictionary = {
   "cli.args.mode_requires_value": "选项 --mode 需要一个值：sources|installed",
   "cli.args.invalid_mode": "无效的 --mode 值：{value}。期望 sources|installed",
   "cli.args.unknown_option": "未知选项：{value}",
-  "cli.args.mode_only_start": "选项 --mode 仅支持 start 命令",
+  "cli.args.mode_only_start": "选项 --mode 仅支持 start 和 config 命令",
 
   "legacy.models.fetch_error": "🔴 获取模型列表失败。请使用 /status 检查服务器状态。",
   "legacy.models.empty": "📋 没有可用模型。请在 OpenCode 中配置 providers。",

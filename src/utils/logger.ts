@@ -12,7 +12,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-const FILE_LOG_NAME = "opencode-telegram.log";
+const FILE_LOG_NAME = "opencode-telegram-group-topics-bot.log";
 const FILE_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const FILE_LOG_MAX_ROTATIONS = 5;
 const LOG_LINE_SEPARATOR = "\n";

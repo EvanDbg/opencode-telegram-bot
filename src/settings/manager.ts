@@ -271,6 +271,10 @@ export function getCurrentModel(scopeKey: string = GLOBAL_SCOPE_KEY): ModelInfo 
   return getScopedMap(currentSettings.scopedModels, scopeKey);
 }
 
+export function getScopedModels(): Record<string, ModelInfo> {
+  return { ...(currentSettings.scopedModels ?? {}) };
+}
+
 export function setCurrentModel(modelInfo: ModelInfo, scopeKey: string = GLOBAL_SCOPE_KEY): void {
   currentSettings.scopedModels = setScopedMapValue(
     currentSettings.scopedModels,

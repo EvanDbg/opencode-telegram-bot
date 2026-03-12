@@ -24,7 +24,7 @@ interface BotCommandI18nDefinition {
 const COMMAND_DEFINITIONS: BotCommandI18nDefinition[] = [
   { command: BOT_COMMAND.STATUS, descriptionKey: "cmd.description.status" },
   { command: BOT_COMMAND.NEW, descriptionKey: "cmd.description.new" },
-  { command: BOT_COMMAND.STOP, descriptionKey: "cmd.description.stop" },
+  { command: BOT_COMMAND.ABORT, descriptionKey: "cmd.description.abort" },
   { command: BOT_COMMAND.SESSIONS, descriptionKey: "cmd.description.sessions" },
   { command: BOT_COMMAND.PROJECTS, descriptionKey: "cmd.description.projects" },
   { command: BOT_COMMAND.RENAME, descriptionKey: "cmd.description.rename" },
